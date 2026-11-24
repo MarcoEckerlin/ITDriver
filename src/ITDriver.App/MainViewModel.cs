@@ -30,6 +30,7 @@ public sealed class MainViewModel : ObservableObject
     private string _deviceFilter = "";
     private bool _onlyProblems;
     private bool _showHidden;
+    private bool _hideVirtual;
     private AppRelease? _availableRelease;
     private CancellationTokenSource? _cts;
 
@@ -112,6 +113,7 @@ public sealed class MainViewModel : ObservableObject
     public string DeviceFilter { get => _deviceFilter; set { if (Set(ref _deviceFilter, value)) DevicesView.Refresh(); } }
     public bool OnlyProblems { get => _onlyProblems; set { if (Set(ref _onlyProblems, value)) DevicesView.Refresh(); } }
     public bool ShowHidden { get => _showHidden; set { if (Set(ref _showHidden, value)) DevicesView.Refresh(); } }
+    public bool HideVirtual { get => _hideVirtual; set { if (Set(ref _hideVirtual, value)) DevicesView.Refresh(); } }
 
     public AppRelease? AvailableRelease
     {
@@ -129,6 +131,7 @@ public sealed class MainViewModel : ObservableObject
         if (o is not DeviceInfo d) return false;
         if (!_showHidden && !d.Present) return false;
         if (_onlyProblems && !d.HasProblem) return false;
+        if (_hideVirtual && d.IsVirtual) return false;
         if (string.IsNullOrWhiteSpace(_deviceFilter)) return true;
         var f = _deviceFilter.Trim();
         return d.Name.Contains(f, StringComparison.OrdinalIgnoreCase)

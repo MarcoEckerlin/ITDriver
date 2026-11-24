@@ -5,8 +5,12 @@ namespace ITDriver.Core;
 /// <summary>Parsed vendor/device information from a PnP hardware ID such as PCI\VEN_10DE&amp;DEV_2484.</summary>
 public sealed partial record HardwareId(string Bus, string VendorId, string? DeviceId, string Raw)
 {
-    [GeneratedRegex(@"(?:VEN|VID)_([0-9A-F]{4})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:VEN|VID)_([0-9A-F]{4})(?![0-9A-Z])", RegexOptions.IgnoreCase)]
     private static partial Regex VendorRegex();
+
+    // ACPI IDs use letter vendor codes, e.g. ACPI\VEN_AMDI&DEV_0010 or ACPI\VEN_ITE&DEV_8800.
+    [GeneratedRegex(@"VEN_([A-Z0-9]{3,4})(?![0-9A-Z])", RegexOptions.IgnoreCase)]
+    private static partial Regex AcpiVendorRegex();
 
     [GeneratedRegex(@"(?:DEV|PID)_([0-9A-F]{4})", RegexOptions.IgnoreCase)]
     private static partial Regex DeviceRegex();
@@ -17,16 +21,20 @@ public sealed partial record HardwareId(string Bus, string VendorId, string? Dev
         var slash = raw.IndexOf('\\');
         if (slash <= 0) return null;
         var bus = raw[..slash].ToUpperInvariant();
-        var v = VendorRegex().Match(raw);
+        var v = bus == "ACPI" ? AcpiVendorRegex().Match(raw) : VendorRegex().Match(raw);
         if (!v.Success) return null;
         var d = DeviceRegex().Match(raw);
         return new HardwareId(bus, v.Groups[1].Value.ToUpperInvariant(), d.Success ? d.Groups[1].Value.ToUpperInvariant() : null, raw);
     }
 
+    /// <summary>True for IDs of physical buses (as opposed to software/virtual devices like ROOT\\...).</summary>
+    public bool IsPhysicalBus => Bus is "PCI" or "USB" or "HDAUDIO" or "ACPI" or "BTHENUM" or "HID" or "USBSTOR" or "SCSI";
+
     /// <summary>"PCI" or "USB" style namespace used for the vendor lookup (HDAUDIO uses PCI vendor IDs).</summary>
     public string VendorNamespace => Bus switch
     {
-        "USB" or "USBSTOR" or "HID" or "BTHENUM" => "USB",
+        "USB" or "USBSTOR" or "HID" or "BTHENUM" or "SWC" => "USB",
+        "ACPI" => "ACPI",
         _ => "PCI",
     };
 }

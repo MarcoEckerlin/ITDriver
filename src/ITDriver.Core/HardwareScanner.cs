@@ -35,7 +35,7 @@ public sealed class HardwareScanner
                     ErrorCode = Convert.ToInt32(o["ConfigManagerErrorCode"] ?? 0),
                     Present = o["Present"] as bool? ?? true,
                     DriverVersion = d?["DriverVersion"] as string,
-                    DriverDate = ParseCim(d?["DriverDate"] as string),
+                    DriverDate = NormalizeDriverDate(ParseCim(d?["DriverDate"] as string)),
                     DriverProvider = d?["DriverProviderName"] as string,
                     InfName = d?["InfName"] as string,
                     IsSigned = d?["IsSigned"] as bool?,
@@ -79,6 +79,9 @@ public sealed class HardwareScanner
         }
         catch (Exception ex) { Log.Write($"WMI-Abfrage fehlgeschlagen ({wql}): {ex.Message}"); }
     }
+
+    /// <summary>Windows inbox drivers report the placeholder date 21.06.2006; treat it as unknown instead of "very old".</summary>
+    internal static DateTime? NormalizeDriverDate(DateTime? date) => date == new DateTime(2006, 6, 21) ? null : date;
 
     internal static DateTime? ParseCim(string? cim)
     {

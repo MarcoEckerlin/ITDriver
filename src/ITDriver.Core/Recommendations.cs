@@ -84,7 +84,7 @@ public static class RecommendationEngine
 
         // Very old third-party drivers on relevant device classes.
         var oldLimit = DateTime.Today.AddYears(-Math.Max(1, oldDriverYears));
-        foreach (var d in devices.Where(d => d.Present && !d.HasProblem && d.DriverDate < oldLimit
+        foreach (var d in devices.Where(d => d.Present && !d.HasProblem && !d.IsVirtual && d.DriverDate < oldLimit
                                              && RelevantClasses.Contains(d.Class ?? "")
                                              && !string.Equals(d.DriverProvider, "Microsoft", StringComparison.OrdinalIgnoreCase)
                                              && !updatedDevices.Contains(d.InstanceId)

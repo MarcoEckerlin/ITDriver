@@ -190,6 +190,7 @@
                             <DockPanel Margin="0,0,0,12">
                                 <TextBox DockPanel.Dock="Left" Width="260" Text="{Binding DeviceFilter, UpdateSourceTrigger=PropertyChanged}" ToolTip="Suchen nach Name, Klasse, Hersteller oder Hardware-ID"/>
                                 <CheckBox Content="Nur Probleme" IsChecked="{Binding OnlyProblems}" Margin="14,0,0,0"/>
+                                <CheckBox Content="Virtuelle Geräte ausblenden" IsChecked="{Binding HideVirtual}" Margin="14,0,0,0"/>
                                 <CheckBox Content="Nicht angeschlossene zeigen" IsChecked="{Binding ShowHidden}" Margin="14,0,0,0"/>
                             </DockPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">

@@ -47,6 +47,8 @@ public sealed class DeviceInfo
     [JsonIgnore] public string VendorName => Vendor?.Name ?? Manufacturer ?? "";
     [JsonIgnore] public bool UsesGenericMicrosoftDriver =>
         string.Equals(DriverProvider, "Microsoft", StringComparison.OrdinalIgnoreCase) && Vendor is { IsMicrosoft: false };
+    /// <summary>Software/virtual device (ROOT\..., SWD\..., app-installed adapters) rather than physical hardware.</summary>
+    [JsonIgnore] public bool IsVirtual => !HardwareIds.Concat(CompatibleIds).Select(HardwareId.TryParse).Any(h => h is { IsPhysicalBus: true });
     [JsonIgnore] public int? DriverAgeDays => DriverDate is { } d ? (int)(DateTime.Today - d.Date).TotalDays : null;
     [JsonIgnore] public string CatalogSearchUrl => MicrosoftCatalog.SearchUrl(this);
 }
