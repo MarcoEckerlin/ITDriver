@@ -24,6 +24,16 @@ public partial class MainWindow : Window
         DataContext = _vm;
         Loaded += async (_, _) =>
         {
+            if (!File.Exists(AppPaths.Settings))
+            {
+                // First start: store defaults and register the weekly background scan.
+                try
+                {
+                    _vm.Settings.Save();
+                    await new SchedulerService().ApplyAsync(_vm.Settings, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ITDriver.exe"));
+                }
+                catch (Exception ex) { Log.Write("Erststart-Einrichtung: " + ex.Message); }
+            }
             if (justUpdated) _vm.Status = $"ITDriver wurde auf Version {SelfUpdater.CurrentVersion.ToString(3)} aktualisiert.";
             if (_vm.Settings.AutoCheckAppUpdates) _ = _vm.CheckAppUpdateAsync(silent: true);
             if (_vm.Settings.ScanOnStartup) await _vm.ScanAsync();

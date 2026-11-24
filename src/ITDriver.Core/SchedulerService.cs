@@ -34,8 +34,8 @@ public sealed class SchedulerService
         };
         // /TR needs the quoted exe path inside the quoted command: "\"C:\...\ITDriver.exe\" --background-scan"
         var tr = $"\"\\\"{exePath}\\\" --background-scan\"";
-        // /IT = only when the user is logged on, so the notification is visible; /RL HIGHEST = elevated without UAC prompt.
-        return $"/Create /F /TN {ProcessRunner.Quote(TaskName)} /TR {tr} {schedule} /ST {time:HH\\:mm} /RL HIGHEST /IT";
+        // Runs as the current user while logged on (so the notification is visible); /RL HIGHEST = elevated without UAC prompt.
+        return $"/Create /F /TN {ProcessRunner.Quote(TaskName)} /TR {tr} {schedule} /ST {time:HH\\:mm} /RL HIGHEST";
     }
 
     private static string DayCode(DayOfWeek d) => d switch
