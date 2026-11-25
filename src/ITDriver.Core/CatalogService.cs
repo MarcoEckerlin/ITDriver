@@ -16,6 +16,23 @@ public sealed record CatalogEntry(string UpdateId, string Title, string Products
     /// <summary>Product list targets Windows 10/11 client (not only Server or legacy Windows).</summary>
     public bool TargetsWindows10Or11 =>
         Products.Contains("Windows 10", StringComparison.OrdinalIgnoreCase) || Products.Contains("Windows 11", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly Dictionary<string, int> Win11Builds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["21H2"] = 22000, ["22H2"] = 22621, ["23H2"] = 22631, ["24H2"] = 26100, ["25H2"] = 26200, ["26H1"] = 28000, ["26H2"] = 26300,
+    };
+
+    /// <summary>Lowest Windows build the package is published for ("Windows 11 Client, version 24H2 and later" = 26100; Windows 10 = 0).</summary>
+    public int MinBuild
+    {
+        get
+        {
+            if (Products.Contains("Windows 10", StringComparison.OrdinalIgnoreCase)) return 0;
+            var builds = System.Text.RegularExpressions.Regex.Matches(Products, @"version\s+(\d\d[HhAaBb]\d)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                .Select(m => Win11Builds.TryGetValue(m.Groups[1].Value, out var b) ? b : 0).ToList();
+            return builds.Count == 0 ? 0 : builds.Min();
+        }
+    }
 }
 
 /// <summary>
@@ -41,7 +58,7 @@ public sealed partial class CatalogService
     internal Task<string> SearchHtmlAsync(string query, CancellationToken ct = default)
         => _http.GetStringAsync(BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query), ct);
 
-    [GeneratedRegex(@"goToDetails\(\s*[""']([0-9a-fA-F\-]{36})[""']\s*\)\s*;?\s*['""]?\s*>(.*?)</a>", RegexOptions.Singleline)]
+    [GeneratedRegex(@"goToDetails\(\s*[""']([0-9a-fA-F\-]{36})[""']\s*\)\s*;?\s*['""]?[^>]*>(.*?)</a>", RegexOptions.Singleline)]
     private static partial Regex RowRegex();
 
     [GeneratedRegex(@"<[^>]+>")]
@@ -118,8 +135,10 @@ public sealed partial class CatalogService
         => d.Present && !d.IsVirtual && d.ErrorCode is not (22 or 45) && QueriesFor(d).Count > 0;
 
     /// <summary>Picks the best newer catalog driver for a device, or null if the installed one is current.</summary>
-    public static CatalogEntry? PickNewer(DeviceInfo device, IEnumerable<CatalogEntry> entries)
+    public static CatalogEntry? PickNewer(DeviceInfo device, IEnumerable<CatalogEntry> entries, int? osBuild = null)
     {
+        var build = osBuild ?? Environment.OSVersion.Version.Build;
+        entries = entries.Where(e => e.MinBuild <= build).ToList();
         var installed = VersionUtil.Parse(device.DriverVersion);
         if (UsesGenericDriverWithVendorAlternative(device))
         {

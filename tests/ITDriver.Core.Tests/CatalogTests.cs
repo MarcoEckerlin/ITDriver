@@ -12,7 +12,7 @@ public class CatalogTests
     <tr id="0e1b2c3d-1111-2222-3333-444455556666_R1">
       <td class="resultsbottomBorder" id="0e1b2c3d-1111-2222-3333-444455556666_C0_R1"><input type="button" value="Download"/></td>
       <td class="resultsbottomBorder resultspadding" id="0e1b2c3d-1111-2222-3333-444455556666_C1_R1">
-        <a id="0e1b2c3d-1111-2222-3333-444455556666_link" href="javascript:void(0);" onclick='goToDetails("0e1b2c3d-1111-2222-3333-444455556666");'>
+        <a id='0e1b2c3d-1111-2222-3333-444455556666_link' href= "javascript:void(0);" onclick='goToDetails("0e1b2c3d-1111-2222-3333-444455556666");' class="contentTextItemSpacerNoBreakLink">
           Realtek Semiconductor Corp. - Net - 1125.31.725.2025
         </a>
       </td>
@@ -49,6 +49,22 @@ public class CatalogTests
         Assert.True(e.IsDriver);
         Assert.True(e.TargetsWindows10Or11);
         Assert.False(e.IsArm);
+    }
+
+    [Theory]
+    [InlineData("Windows 11 Client,  version 24H2 and later,  Servicing Drivers", 26100)]
+    [InlineData("Windows 11 Client,  version 25H2 and later,  Servicing Drivers, Windows 11 Client S,  version 25H2 and later", 26200)]
+    [InlineData("Windows 10 and later drivers,Windows 11 Client, version 24H2 and later", 0)]
+    public void Reads_minimum_windows_build(string products, int build)
+        => Assert.Equal(build, new CatalogEntry("x", "t", products, "Drivers", null, "1.0", 0).MinBuild);
+
+    [Fact]
+    public void Skips_drivers_for_newer_windows()
+    {
+        var newer = new CatalogEntry("a", "Realtek Net Driver Update (2.0)", "Windows 11 Client, version 25H2 and later, Servicing Drivers", "Drivers (Networking)", null, "2.0.0.0", 0);
+        var dev = Dev(@"PCI\VEN_10EC&DEV_8125", "1.0.0.0");
+        Assert.Null(CatalogService.PickNewer(dev, new[] { newer }, osBuild: 26100));
+        Assert.NotNull(CatalogService.PickNewer(dev, new[] { newer }, osBuild: 26300));
     }
 
     [Fact]
