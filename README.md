@@ -46,7 +46,7 @@ dotnet publish src/ITDriver.App -c Release -r win-x64 --self-contained -p:Publis
 - `src/ITDriver.App` – WPF-Oberfläche
 - `tools/Get-ITDriverInventory.ps1` – Hardware-Inventar als JSON (nur lesend), z. B. für Fehlerberichte
 
-**Neue Version veröffentlichen:** Tag `vX.Y.Z` pushen. Der Release-Workflow baut, testet, erzeugt `ITDriver-win-x64.zip` + `.sha256` und veröffentlicht das Release. Installierte Apps finden es automatisch.
+**Neue Version veröffentlichen:** Tag `vX.Y.Z` pushen oder unter Actions → Release → „Run workflow“ die Version eingeben. Der Release-Workflow baut, testet, erzeugt `ITDriver-win-x64.zip` + `.sha256` und veröffentlicht das Release. Installierte Apps finden es automatisch.
 
 ## Lizenz
 
