@@ -13,6 +13,8 @@ public sealed class ScanResult
     public List<DriverUpdate> IgnoredUpdates { get; set; } = new();
     public List<Recommendation> Recommendations { get; set; } = new();
     public string? WindowsUpdateError { get; set; }
+    public string? CatalogError { get; set; }
+    public int MissingCount => Updates.Count(u => u.IsMissingDriver) + Devices.Count(d => d.Present && d.IsMissingDriver && !d.IsVirtual && Updates.All(u => u.DeviceInstanceId != d.InstanceId));
 
     public int ProblemCount => Devices.Count(d => d.Present && d.HasProblem && d.ErrorCode is not (22 or 45));
 }
@@ -23,6 +25,7 @@ public sealed class DriverManager
 {
     public HardwareScanner Scanner { get; } = new();
     public WindowsUpdateService WindowsUpdate { get; } = new();
+    public CatalogService Catalog { get; } = new();
     public DriverStoreService Store { get; } = new();
     public RestorePointService RestorePoints { get; } = new();
     public DriverBackupService Backups { get; }
@@ -60,6 +63,24 @@ public sealed class DriverManager
                     ? $"0x{c.HResult:X8}: {WuErrors.Describe(c.HResult)}"
                     : ex.Message;
                 Log.Write("Windows Update Suche fehlgeschlagen: " + result.WindowsUpdateError);
+            }
+        }
+
+        if (Settings.SearchCatalog)
+        {
+            progress?.Report("Durchsuche Microsoft Update-Katalog nach neueren Treibern …");
+            try
+            {
+                var covered = result.Updates.Concat(result.IgnoredUpdates).Select(u => u.DeviceInstanceId).Where(i => i != null).ToHashSet(StringComparer.OrdinalIgnoreCase)!;
+                var found = await Catalog.FindUpdatesAsync(result.Devices, covered!, progress, ct);
+                result.Updates.AddRange(found.Where(u => !Settings.IsIgnored(u)));
+                result.IgnoredUpdates.AddRange(found.Where(Settings.IsIgnored));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                result.CatalogError = ex.Message;
+                Log.Write("Katalogsuche fehlgeschlagen: " + ex.Message);
             }
         }
 
@@ -110,7 +131,10 @@ public sealed class DriverManager
             ct.ThrowIfCancellationRequested();
             onState?.Invoke(u, "Läuft …");
             progress?.Report($"Installiere {u.DisplayName} …");
-            var outcome = await WindowsUpdate.InstallAsync(u, new Progress<string>(s => onState?.Invoke(u, s)), ct);
+            var stateProgress = new Progress<string>(s => onState?.Invoke(u, s));
+            var outcome = u.Source == UpdateSource.Catalog
+                ? await Catalog.InstallAsync(u, stateProgress, ct)
+                : await WindowsUpdate.InstallAsync(u, stateProgress, ct);
             outcomes.Add(outcome);
             onState?.Invoke(u, outcome.Success ? (outcome.RebootRequired ? "✔ Neustart nötig" : "✔ Installiert") : "✖ " + outcome.Message);
 

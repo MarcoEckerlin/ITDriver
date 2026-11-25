@@ -53,7 +53,7 @@ public sealed class DeviceInfo
     [JsonIgnore] public string CatalogSearchUrl => MicrosoftCatalog.SearchUrl(this);
 }
 
-public enum UpdateSource { WindowsUpdate, Vendor }
+public enum UpdateSource { WindowsUpdate, Catalog, Vendor }
 
 /// <summary>A driver update offered by a legitimate source.</summary>
 public sealed class DriverUpdate : ObservableObject
@@ -71,6 +71,7 @@ public sealed class DriverUpdate : ObservableObject
     public long SizeBytes { get; set; }
     public UpdateSource Source { get; set; } = UpdateSource.WindowsUpdate;
     public string? InfoUrl { get; set; }
+    public string? NewVersion { get; set; }
 
     /// <summary>The local device this update targets, if it could be matched.</summary>
     public string? DeviceInstanceId { get; set; }
@@ -84,7 +85,13 @@ public sealed class DriverUpdate : ObservableObject
     [JsonIgnore] public string State { get => _state; set => Set(ref _state, value); }
     [JsonIgnore] public string SizeText => SizeBytes <= 0 ? "" : SizeBytes >= 1 << 20 ? $"{SizeBytes / 1048576.0:0.#} MB" : $"{SizeBytes / 1024.0:0} KB";
     [JsonIgnore] public string DisplayName => DeviceName ?? DriverModel ?? Title;
-    [JsonIgnore] public string SourceText => Source == UpdateSource.WindowsUpdate ? "Windows Update" : Provider ?? "Hersteller";
+    [JsonIgnore] public string SourceText => Source switch
+    {
+        UpdateSource.WindowsUpdate => "Windows Update",
+        UpdateSource.Catalog => "Microsoft Update-Katalog",
+        _ => Provider ?? "Hersteller",
+    };
+    [JsonIgnore] public string KindText => IsMissingDriver ? "Fehlt" : string.IsNullOrEmpty(InstalledVersion) ? "Neu" : "Veraltet";
 }
 
 /// <summary>A driver package in the Windows driver store (oemNN.inf).</summary>

@@ -45,10 +45,18 @@ public sealed class WindowsUpdateService
                 InfoUrl = Safe(() => (string)u.SupportUrl),
                 Source = UpdateSource.WindowsUpdate,
             };
+            update.NewVersion = VersionFromTitle(update.Title);
             Match(update, byHwid);
             list.Add(update);
         }
         return list;
+    }
+
+    /// <summary>Windows Update driver titles end with the version, e.g. "Realtek - Net - 10.69.1004.2024".</summary>
+    internal static string? VersionFromTitle(string title)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(title, @"(\d+\.\d+\.\d+(?:\.\d+)?)\)?\s*$");
+        return m.Success ? m.Groups[1].Value : null;
     }
 
     internal static Dictionary<string, DeviceInfo> BuildHardwareIdIndex(IEnumerable<DeviceInfo> devices)

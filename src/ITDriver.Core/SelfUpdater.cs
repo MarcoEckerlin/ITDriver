@@ -6,13 +6,15 @@ using System.Text.Json;
 
 namespace ITDriver.Core;
 
-public sealed record AppRelease(Version Version, string Tag, string Name, string Notes, string? ZipUrl, string? ShaUrl, string HtmlUrl);
+public sealed record AppRelease(Version Version, string Tag, string Name, string Notes, string? ZipUrl, string? ShaUrl, string HtmlUrl,
+    string? SetupUrl = null, string? SetupShaUrl = null);
 
 /// <summary>Checks GitHub Releases for a newer ITDriver and installs it (SHA-256 verified).</summary>
 public sealed class SelfUpdater
 {
     public const string Repository = "MarcoEckerlin/ITDriver";
     public const string AssetName = "ITDriver-win-x64.zip";
+    public const string SetupAssetName = "ITDriver-Setup.exe";
 
     private readonly HttpClient _http;
 
@@ -38,7 +40,7 @@ public sealed class SelfUpdater
         var root = doc.RootElement;
         if (root.TryGetProperty("draft", out var draft) && draft.GetBoolean()) return null;
         var tag = root.GetProperty("tag_name").GetString() ?? "";
-        string? zip = null, sha = null;
+        string? zip = null, sha = null, setup = null, setupSha = null;
         if (root.TryGetProperty("assets", out var assets))
         {
             foreach (var a in assets.EnumerateArray())
@@ -47,6 +49,8 @@ public sealed class SelfUpdater
                 var url = a.GetProperty("browser_download_url").GetString();
                 if (string.Equals(name, AssetName, StringComparison.OrdinalIgnoreCase)) zip = url;
                 if (string.Equals(name, AssetName + ".sha256", StringComparison.OrdinalIgnoreCase)) sha = url;
+                if (string.Equals(name, SetupAssetName, StringComparison.OrdinalIgnoreCase)) setup = url;
+                if (string.Equals(name, SetupAssetName + ".sha256", StringComparison.OrdinalIgnoreCase)) setupSha = url;
             }
         }
         return new AppRelease(
@@ -55,7 +59,8 @@ public sealed class SelfUpdater
             root.TryGetProperty("name", out var n) ? n.GetString() ?? tag : tag,
             root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "",
             zip, sha,
-            root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "");
+            root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "",
+            setup, setupSha);
     }
 
     public static bool IsNewer(AppRelease release, Version current)
@@ -66,6 +71,10 @@ public sealed class SelfUpdater
     /// <summary>Downloads, verifies and stages the update, then starts a helper script that swaps the files after this process exits.</summary>
     public async Task<string> DownloadAndApplyAsync(AppRelease release, IProgress<string>? progress, CancellationToken ct = default)
     {
+        // Installed via setup (uninstaller next to the exe): update through the new setup so "Apps & Features" stays correct.
+        if (IsInstalledWithSetup && release.SetupUrl != null && release.SetupShaUrl != null)
+            return await RunSetupAsync(release, progress, ct);
+
         if (release.ZipUrl is null || release.ShaUrl is null)
             throw new InvalidOperationException("Das Release enthält kein signiertes Update-Paket (ZIP + SHA256).");
 
@@ -103,6 +112,29 @@ public sealed class SelfUpdater
 
         Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{script}\"") { CreateNoWindow = true, UseShellExecute = false });
         return script;
+    }
+
+    public static bool IsInstalledWithSetup => File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
+
+    private async Task<string> RunSetupAsync(AppRelease release, IProgress<string>? progress, CancellationToken ct)
+    {
+        var work = Path.Combine(Path.GetTempPath(), "ITDriver-Update-" + release.Tag);
+        Directory.CreateDirectory(work);
+        var setup = Path.Combine(work, SetupAssetName);
+        progress?.Report("Lade Installer herunter …");
+        await using (var fs = File.Create(setup))
+        await using (var s = await _http.GetStreamAsync(release.SetupUrl, ct))
+            await s.CopyToAsync(fs, ct);
+        progress?.Report("Prüfe Prüfsumme …");
+        var expected = ParseSha256(await _http.GetStringAsync(release.SetupShaUrl, ct));
+        string actual;
+        await using (var zs = File.OpenRead(setup))
+            actual = Convert.ToHexString(await SHA256.HashDataAsync(zs, ct));
+        if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Prüfsumme stimmt nicht – Update wurde verworfen.");
+        // Silent install; the setup closes this app, installs and restarts ITDriver with --updated.
+        Process.Start(new ProcessStartInfo(setup, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS") { UseShellExecute = true });
+        return setup;
     }
 
     internal static string ParseSha256(string text)

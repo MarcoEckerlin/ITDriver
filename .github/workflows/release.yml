@@ -33,16 +33,24 @@ jobs:
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Ungueltige Version: $v" }
           echo "version=$v" >> $env:GITHUB_OUTPUT
       - name: Test
+        env:
+          ITDRIVER_ONLINE_TESTS: '1'
         run: dotnet test tests/ITDriver.Core.Tests -c Release
       - name: Publish
         run: dotnet publish src/ITDriver.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:Version=${{ steps.v.outputs.version }} -o publish
       - name: Package
         shell: pwsh
         run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ steps.v.outputs.version }} installer\ITDriver.iss
+          if (-not (Test-Path dist/ITDriver-Setup.exe)) { throw "Installer wurde nicht erstellt" }
+          Copy-Item dist/ITDriver-Setup.exe ITDriver-Setup.exe
           Copy-Item tools/Get-ITDriverInventory.ps1 publish/
           Compress-Archive -Path publish/* -DestinationPath ITDriver-win-x64.zip
-          $hash = (Get-FileHash ITDriver-win-x64.zip -Algorithm SHA256).Hash
-          "$hash  ITDriver-win-x64.zip" | Out-File -Encoding ascii ITDriver-win-x64.zip.sha256
+          foreach ($f in 'ITDriver-win-x64.zip','ITDriver-Setup.exe') {
+            $hash = (Get-FileHash $f -Algorithm SHA256).Hash
+            "$hash  $f" | Out-File -Encoding ascii "$f.sha256"
+          }
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -51,5 +59,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
+            ITDriver-Setup.exe
+            ITDriver-Setup.exe.sha256
             ITDriver-win-x64.zip
             ITDriver-win-x64.zip.sha256
