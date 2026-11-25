@@ -36,10 +36,10 @@ public sealed partial class CatalogService
     }
 
     public async Task<List<CatalogEntry>> SearchAsync(string query, CancellationToken ct = default)
-    {
-        var html = await _http.GetStringAsync(BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query), ct);
-        return ParseSearch(html);
-    }
+        => ParseSearch(await SearchHtmlAsync(query, ct));
+
+    internal Task<string> SearchHtmlAsync(string query, CancellationToken ct = default)
+        => _http.GetStringAsync(BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query), ct);
 
     [GeneratedRegex(@"goToDetails\(\s*[""']([0-9a-fA-F\-]{36})[""']\s*\)\s*;?\s*['""]?\s*>(.*?)</a>", RegexOptions.Singleline)]
     private static partial Regex RowRegex();

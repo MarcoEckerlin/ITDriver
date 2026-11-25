@@ -114,8 +114,14 @@ public class CatalogTests
     {
         if (Environment.GetEnvironmentVariable("ITDRIVER_ONLINE_TESTS") != "1") return;
         var svc = new CatalogService();
-        var results = await svc.SearchAsync("VEN_10EC&DEV_8125");
-        Assert.NotEmpty(results);
+        var html = await svc.SearchHtmlAsync("VEN_10EC&DEV_8125");
+        var results = CatalogService.ParseSearch(html);
+        if (results.Count == 0)
+        {
+            // Show the relevant part of the real page in the CI log to adapt the parser.
+            var i = Math.Max(0, html.IndexOf("_R1", StringComparison.Ordinal) - 1500);
+            Assert.Fail($"Keine Treffer geparst (HTML {html.Length} Zeichen). Ausschnitt:\n{html.Substring(i, Math.Min(5000, html.Length - i))}");
+        }
         Assert.Contains(results, r => r.IsDriver && !string.IsNullOrEmpty(r.Version));
         var urls = await svc.GetDownloadUrlsAsync(results.First(r => r.IsDriver).UpdateId);
         Assert.NotEmpty(urls);
