@@ -9,6 +9,8 @@ public sealed class AppSettings
     public bool AutoCheckAppUpdates { get; set; } = true;
     public bool ScanOnStartup { get; set; } = false;
     public bool ShowVendorRecommendations { get; set; } = true;
+    /// <summary>Also search the Microsoft Update Catalog per device for newer drivers than Windows Update offers.</summary>
+    public bool SearchCatalog { get; set; } = true;
     public int OldDriverYears { get; set; } = 3;
     public ScanSchedule Schedule { get; set; } = ScanSchedule.Weekly;
     public string ScheduleTime { get; set; } = "12:00";

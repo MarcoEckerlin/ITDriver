@@ -80,7 +80,11 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool HasScan => _scan != null;
-    public string? WindowsUpdateError => _scan?.WindowsUpdateError is { } e ? "Windows Update konnte nicht abgefragt werden: " + e : null;
+    public string? WindowsUpdateError => string.Join("\n", new[]
+    {
+        _scan?.WindowsUpdateError is { } e ? "Windows Update konnte nicht abgefragt werden: " + e : null,
+        _scan?.CatalogError is { } c ? "Microsoft Update-Katalog: " + c : null,
+    }.Where(x => x != null)) is { Length: > 0 } msg ? msg : null;
     public string LastScanText => _scan is null ? "Noch kein Scan in dieser Sitzung." : $"Letzter Scan: {_scan.Time:dd.MM.yyyy HH:mm}";
     public string UpdateBadge => _scan is { Updates.Count: > 0 } s ? s.Updates.Count.ToString() : "";
     public string ProblemBadge => _scan is { ProblemCount: > 0 } s ? s.ProblemCount.ToString() : "";
@@ -90,7 +94,9 @@ public sealed class MainViewModel : ObservableObject
     {
         null => "Scanne deinen PC",
         { Updates.Count: 0, ProblemCount: 0 } => "Alle Treiber sind auf dem neuesten Stand",
-        var s when s.Updates.Count > 0 => $"{s.Updates.Count} Treiber-Update(s) verfügbar",
+        var s when s.Updates.Count > 0 => s.MissingCount > 0
+            ? $"{s.MissingCount} fehlende und {s.Updates.Count(u => !u.IsMissingDriver)} veraltete Treiber gefunden"
+            : $"{s.Updates.Count} veraltete Treiber gefunden",
         var s => $"{s.ProblemCount} Gerät(e) mit Problemen",
     };
 
@@ -100,7 +106,7 @@ public sealed class MainViewModel : ObservableObject
 
     public string HealthColor => _scan switch
     {
-        null => "#0B62D6",
+        null => "#2563EB",
         { Updates.Count: 0, ProblemCount: 0 } => "#1E8E3E",
         { ProblemCount: > 0 } => "#C62828",
         _ => "#C77700",
@@ -176,7 +182,7 @@ public sealed class MainViewModel : ObservableObject
     public Task ScanAsync() => RunAsync("Scan läuft …", async ct =>
     {
         var scan = await Manager.ScanAsync(Progress, true, ct);
-        Fill(Updates, scan.Updates.OrderByDescending(u => u.IsMissingDriver).ThenBy(u => u.DisplayName));
+        Fill(Updates, scan.Updates.OrderByDescending(u => u.IsMissingDriver).ThenBy(u => u.Source).ThenBy(u => u.DisplayName));
         Fill(IgnoredUpdates, scan.IgnoredUpdates);
         Fill(Devices, scan.Devices);
         Fill(Recommendations, scan.Recommendations);

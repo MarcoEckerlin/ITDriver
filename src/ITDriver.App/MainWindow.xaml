@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ITDriver.App"
         Title="ITDriver – Treiber-Updater" Height="780" Width="1240" MinHeight="600" MinWidth="980"
-        WindowStartupLocation="CenterScreen" Background="{StaticResource Page}" FontFamily="Segoe UI" FontSize="13"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Page}" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="13"
         Icon="Assets/itdriver.ico">
     <Grid>
         <Grid.ColumnDefinitions>
@@ -17,23 +17,23 @@
                 <Image Source="Assets/itdriver.ico" Width="34" Height="34"/>
                 <StackPanel Margin="10,0,0,0">
                     <TextBlock Text="ITDriver" Foreground="White" FontSize="20" FontWeight="Bold"/>
-                    <TextBlock Text="kostenlos &amp; quelloffen" Foreground="#9CA3AF" FontSize="11"/>
+                    <TextBlock Text="kostenlos &amp; quelloffen" Foreground="{StaticResource NavMuted}" FontSize="11"/>
                 </StackPanel>
             </StackPanel>
             <StackPanel DockPanel.Dock="Bottom" Margin="20,0,20,18">
                 <Button Style="{StaticResource Primary}" Margin="0,0,0,10" Click="InstallAppUpdate_Click"
                         Visibility="{Binding HasAppUpdate, Converter={StaticResource BoolToVis}}" Content="{Binding AppUpdateText}"/>
-                <TextBlock Text="{Binding AppVersion}" Foreground="#9CA3AF" FontSize="11"/>
+                <TextBlock Text="{Binding AppVersion}" Foreground="{StaticResource NavMuted}" FontSize="11"/>
             </StackPanel>
             <StackPanel x:Name="Nav">
-                <RadioButton Style="{StaticResource Nav}" Content="Übersicht" IsChecked="True" Checked="Nav_Checked" Tag=""/>
-                <RadioButton Style="{StaticResource Nav}" Content="Updates" Checked="Nav_Checked" Tag="{Binding UpdateBadge}"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Geräte" Checked="Nav_Checked" Tag="{Binding ProblemBadge}"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Empfehlungen" Checked="Nav_Checked" Tag="{Binding RecommendationBadge}"/>
-                <RadioButton Style="{StaticResource Nav}" Content="Backup &amp; Wiederherstellung" Checked="Nav_Checked" Tag=""/>
-                <RadioButton Style="{StaticResource Nav}" Content="Bereinigung" Checked="Nav_Checked" Tag=""/>
-                <RadioButton Style="{StaticResource Nav}" Content="Verlauf" Checked="Nav_Checked" Tag=""/>
-                <RadioButton Style="{StaticResource Nav}" Content="Einstellungen" Checked="Nav_Checked" Tag=""/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE80F;" Content="Übersicht" IsChecked="True" Checked="Nav_Checked" Tag=""/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE895;" Content="Updates" Checked="Nav_Checked" Tag="{Binding UpdateBadge}"/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE772;" Content="Geräte" Checked="Nav_Checked" Tag="{Binding ProblemBadge}"/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xEA80;" Content="Empfehlungen" Checked="Nav_Checked" Tag="{Binding RecommendationBadge}"/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE8F1;" Content="Backup &amp; Wiederherstellung" Checked="Nav_Checked" Tag=""/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE74D;" Content="Bereinigung" Checked="Nav_Checked" Tag=""/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE81C;" Content="Verlauf" Checked="Nav_Checked" Tag=""/>
+                <RadioButton Style="{StaticResource Nav}" local:NavProps.Glyph="&#xE713;" Content="Einstellungen" Checked="Nav_Checked" Tag=""/>
             </StackPanel>
         </DockPanel>
 
@@ -138,7 +138,7 @@
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top">
                             <TextBlock Text="Treiber-Updates" Style="{StaticResource H1}"/>
-                            <TextBlock Style="{StaticResource Sub}" Text="Diese Treiber bietet Windows Update für deine Geräte an. Vor der Installation erstellt ITDriver einen Wiederherstellungspunkt und sichert den alten Treiber."/>
+                            <TextBlock Style="{StaticResource Sub}" Text="Fehlende und veraltete Treiber aus Windows Update und dem Microsoft Update-Katalog. Vor der Installation erstellt ITDriver einen Wiederherstellungspunkt und sichert den alten Treiber."/>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                                 <Button Style="{StaticResource Primary}" Content="Ausgewählte installieren" Click="InstallSelected_Click" IsEnabled="{Binding IsIdle}"/>
                                 <Button Content="Alle auswählen" Click="SelectAll_Click"/>
@@ -163,12 +163,12 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Art" Binding="{Binding KindText}" Width="70" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="Gerät" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="Klasse" Binding="{Binding DriverClass}" Width="90" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="Installiert" Binding="{Binding InstalledVersion}" Width="120" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="vom" Binding="{Binding InstalledDate, StringFormat=dd.MM.yyyy}" Width="80" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="Neu vom" Binding="{Binding DriverDate, StringFormat=dd.MM.yyyy}" Width="80" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="Anbieter" Binding="{Binding Provider}" Width="110" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Installiert" Binding="{Binding InstalledVersion}" Width="115" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Neue Version" Binding="{Binding NewVersion}" Width="115" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="vom" Binding="{Binding DriverDate, StringFormat=dd.MM.yyyy}" Width="80" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Quelle" Binding="{Binding SourceText}" Width="150" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="Größe" Binding="{Binding SizeText}" Width="70" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="Status" Binding="{Binding State}" Width="1.2*" IsReadOnly="True"/>
                             </DataGrid.Columns>
@@ -425,6 +425,7 @@
                                 <StackPanel>
                                     <TextBlock Text="Allgemein" Style="{StaticResource H2}"/>
                                     <CheckBox Content="Beim Start automatisch scannen" IsChecked="{Binding Settings.ScanOnStartup}"/>
+                                    <CheckBox Content="Microsoft Update-Katalog nach neueren Treibern durchsuchen (findet deutlich mehr)" IsChecked="{Binding Settings.SearchCatalog}"/>
                                     <CheckBox Content="Empfehlungen zu Herstellertreibern anzeigen" IsChecked="{Binding Settings.ShowVendorRecommendations}"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Treiber als „alt“ markieren ab (Jahre):" VerticalAlignment="Center" Width="230"/>
