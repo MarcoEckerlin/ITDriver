@@ -20,13 +20,27 @@ internal static class BackgroundScan
             return;
         }
 
+        // Also look for a new ITDriver version; it is installed when the app is opened (asks or installs per setting).
+        AppRelease? appUpdate = null;
+        var settings = AppSettings.Load();
+        if (settings.AutoCheckAppUpdates)
+        {
+            try
+            {
+                var latest = await new SelfUpdater().GetLatestAsync();
+                if (SelfUpdater.Decide(latest, SelfUpdater.CurrentVersion, settings) != SelfUpdater.AutoAction.None) appUpdate = latest;
+            }
+            catch (Exception ex) { Log.Write("Update-Prüfung im Hintergrund fehlgeschlagen: " + ex.Message); }
+        }
+
         var important = scan.Recommendations.Count(r => r.Severity == Severity.Important);
-        if (scan.Updates.Count == 0 && scan.ProblemCount == 0 && important == 0) return;
+        if (scan.Updates.Count == 0 && scan.ProblemCount == 0 && important == 0 && appUpdate is null) return;
 
         var text = scan.Updates.Count > 0
             ? $"{scan.Updates.Count} Treiber-Update(s) verfügbar."
             : "";
         if (scan.ProblemCount > 0) text += $" {scan.ProblemCount} Gerät(e) mit Problemen.";
+        if (appUpdate != null) text += $" ITDriver {appUpdate.Version.ToString(3)} ist verfügbar.";
         text += " Klicken zum Öffnen.";
 
         using var icon = new WinForms.NotifyIcon

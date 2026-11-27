@@ -55,6 +55,9 @@ public sealed class DeviceInfo
 
 public enum UpdateSource { WindowsUpdate, Catalog, Vendor }
 
+/// <summary>How ITDriver installs a vendor package itself (None = only the official download page is opened).</summary>
+public enum VendorInstallKind { None, AmdChipset, AmdAdrenalin, InfPackage }
+
 /// <summary>A driver update offered by a legitimate source.</summary>
 public sealed class DriverUpdate : ObservableObject
 {
@@ -72,6 +75,9 @@ public sealed class DriverUpdate : ObservableObject
     public UpdateSource Source { get; set; } = UpdateSource.WindowsUpdate;
     public string? InfoUrl { get; set; }
     public string? NewVersion { get; set; }
+    /// <summary>Direct download on the vendor's own server (vendor packages only).</summary>
+    public string? DownloadUrl { get; set; }
+    public VendorInstallKind VendorInstall { get; set; }
 
     /// <summary>The local device this update targets, if it could be matched.</summary>
     public string? DeviceInstanceId { get; set; }

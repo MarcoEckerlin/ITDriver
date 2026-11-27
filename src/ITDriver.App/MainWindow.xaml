@@ -426,13 +426,16 @@
                                     <TextBlock Text="Allgemein" Style="{StaticResource H2}"/>
                                     <CheckBox Content="Beim Start automatisch scannen" IsChecked="{Binding Settings.ScanOnStartup}"/>
                                     <CheckBox Content="Microsoft Update-Katalog nach neueren Treibern durchsuchen (findet deutlich mehr)" IsChecked="{Binding Settings.SearchCatalog}"/>
-                                    <CheckBox Content="Herstellerseiten prüfen (AMD Chipsatz &amp; Radeon, ASUS-Mainboards)" IsChecked="{Binding Settings.SearchVendors}"/>
+                                    <CheckBox Content="Herstellerseiten prüfen (AMD Chipsatz &amp; Radeon, ASUS-Mainboards) und Pakete direkt installieren" IsChecked="{Binding Settings.SearchVendors}"/>
+                                    <CheckBox Content="Vor dem Installieren einmal nachfragen" IsChecked="{Binding Settings.ConfirmInstall}"/>
                                     <CheckBox Content="Empfehlungen zu Herstellertreibern anzeigen" IsChecked="{Binding Settings.ShowVendorRecommendations}"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Treiber als „alt“ markieren ab (Jahre):" VerticalAlignment="Center" Width="230"/>
                                         <TextBox Width="60" Text="{Binding Settings.OldDriverYears}"/>
                                     </StackPanel>
                                     <CheckBox Content="Automatisch nach neuen ITDriver-Versionen suchen (GitHub)" IsChecked="{Binding Settings.AutoCheckAppUpdates}" Margin="0,10,0,0"/>
+                                    <CheckBox Content="Neue ITDriver-Versionen automatisch installieren (ohne Nachfrage)" IsChecked="{Binding Settings.AutoInstallAppUpdates}"
+                                              IsEnabled="{Binding Settings.AutoCheckAppUpdates}" Margin="20,4,0,0"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <Button Content="Jetzt nach ITDriver-Updates suchen" Click="CheckAppUpdate_Click"/>
                                         <Button Content="Projektseite" Tag="https://github.com/MarcoEckerlin/ITDriver" Click="OpenUrl_Click"/>

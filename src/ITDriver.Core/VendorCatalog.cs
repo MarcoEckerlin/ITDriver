@@ -9,6 +9,8 @@ public static class VendorCatalog
 {
     private static readonly VendorInfo Nvidia = new("NVIDIA", "https://www.nvidia.com/de-de/drivers/", "NVIDIA App",
         Hint: "Grafiktreiber direkt von NVIDIA sind meist aktueller als Windows Update.");
+    private static readonly VendorInfo Qualcomm = new("Qualcomm", "https://www.qualcomm.com/support",
+        Hint: "Snapdragon-/ARM-PCs: Chipsatztreiber kommen über Windows Update und den PC-Hersteller; ITDriver sucht sie im Microsoft Update-Katalog (ARM64).");
     private static readonly VendorInfo Amd = new("AMD", "https://www.amd.com/de/support/download/drivers.html", "AMD Software: Adrenalin Edition (Auto-Detect)",
         Hint: "Grafik- und Chipsatztreiber direkt von AMD sind meist aktueller als Windows Update.");
     private static readonly VendorInfo Intel = new("Intel", "https://www.intel.de/content/www/de/de/support/detect.html", "Intel Driver & Support Assistant",
@@ -36,7 +38,9 @@ public static class VendorCatalog
         ["PCI:14E4"] = new("Broadcom", "https://www.broadcom.com/support/download-search"),
         ["USB:0A5C"] = new("Broadcom", "https://www.broadcom.com/support/download-search"),
         ["PCI:168C"] = new("Qualcomm Atheros", "https://www.qualcomm.com/support", Hint: "Killer-/Atheros-WLAN: Treiber vom PC-Hersteller oder Intel/Killer bevorzugen."),
-        ["PCI:17CB"] = new("Qualcomm", "https://www.qualcomm.com/support"),
+        ["PCI:17CB"] = Qualcomm,
+        // Snapdragon (Windows on ARM): SoC devices are ACPI\VEN_QCOM&DEV_xxxx
+        ["ACPI:QCOM"] = Qualcomm,
         ["USB:0CF3"] = new("Qualcomm Atheros", "https://www.qualcomm.com/support"),
         ["PCI:14C3"] = new("MediaTek", "https://www.mediatek.com/products/connectivity-and-networking", Hint: "MediaTek-WLAN-Treiber kommen meist über Windows Update oder den PC-Hersteller."),
         ["USB:0E8D"] = new("MediaTek", "https://www.mediatek.com/products/connectivity-and-networking"),

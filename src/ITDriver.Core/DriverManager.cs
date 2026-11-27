@@ -26,6 +26,7 @@ public sealed class DriverManager
     public HardwareScanner Scanner { get; } = new();
     public WindowsUpdateService WindowsUpdate { get; } = new();
     public CatalogService Catalog { get; } = new();
+    public VendorInstaller VendorInstaller { get; } = new();
     public VendorUpdateService Vendors { get; } = new();
     public DriverStoreService Store { get; } = new();
     public RestorePointService RestorePoints { get; } = new();
@@ -115,14 +116,17 @@ public sealed class DriverManager
         var outcomes = new List<InstallOutcome>();
         if (updates.Count == 0) return outcomes;
 
-        foreach (var u in updates.Where(u => u.Source == UpdateSource.Vendor))
+        foreach (var u in updates.Where(u => u.Source == UpdateSource.Vendor && u.VendorInstall == VendorInstallKind.None))
         {
-            // Vendor packages come with the vendor's own installer: open the official download page instead of installing silently.
+            // No direct, verifiable download from the vendor's server: open the official download page instead.
             if (u.InfoUrl != null) OpenUrl(u.InfoUrl);
             onState?.Invoke(u, "↗ Herstellerseite geöffnet");
             outcomes.Add(new InstallOutcome { UpdateId = u.UpdateId, Title = u.Title, Success = false, Message = "Download-Seite des Herstellers geöffnet." });
         }
-        updates = updates.Where(u => u.Source != UpdateSource.Vendor).ToList();
+        // Chipset first (other drivers build on it), the interactive Adrenalin installer last.
+        updates = updates.Where(u => u.Source != UpdateSource.Vendor || u.VendorInstall != VendorInstallKind.None)
+            .OrderBy(u => u.VendorInstall switch { VendorInstallKind.AmdChipset => 0, VendorInstallKind.AmdAdrenalin => 2, _ => 1 })
+            .ToList();
         if (updates.Count == 0) return outcomes;
 
         bool restorePoint = false;
@@ -156,9 +160,12 @@ public sealed class DriverManager
             onState?.Invoke(u, "Läuft …");
             progress?.Report($"Installiere {u.DisplayName} …");
             var stateProgress = new Progress<string>(s => onState?.Invoke(u, s));
-            var outcome = u.Source == UpdateSource.Catalog
-                ? await Catalog.InstallAsync(u, stateProgress, ct)
-                : await WindowsUpdate.InstallAsync(u, stateProgress, ct);
+            var outcome = u.Source switch
+            {
+                UpdateSource.Catalog => await Catalog.InstallAsync(u, stateProgress, ct),
+                UpdateSource.Vendor => await VendorInstaller.InstallAsync(u, stateProgress, ct),
+                _ => await WindowsUpdate.InstallAsync(u, stateProgress, ct),
+            };
             outcomes.Add(outcome);
             onState?.Invoke(u, outcome.Success ? (outcome.RebootRequired ? "✔ Neustart nötig" : "✔ Installiert") : "✖ " + outcome.Message);
 

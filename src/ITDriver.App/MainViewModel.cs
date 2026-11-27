@@ -309,35 +309,73 @@ public sealed class MainViewModel : ObservableObject
         MessageBox.Show(msg, "ITDriver", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
     });
 
+    /// <summary>
+    /// Checks GitHub Releases. Automatic checks (silent) ask once per version – or install right away when
+    /// "install automatically" is on; a manual check always reports the result.
+    /// </summary>
     public async Task CheckAppUpdateAsync(bool silent)
     {
+        AppRelease? latest;
         try
         {
-            var latest = await new SelfUpdater().GetLatestAsync();
-            if (latest != null && SelfUpdater.IsNewer(latest, SelfUpdater.CurrentVersion))
-            {
-                AvailableRelease = latest;
-                if (!silent) Status = AppUpdateText;
-            }
-            else if (!silent)
-            {
-                Status = "ITDriver ist aktuell.";
-                MessageBox.Show($"Du verwendest die neueste Version ({SelfUpdater.CurrentVersion.ToString(3)}).", "ITDriver", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            latest = await new SelfUpdater().GetLatestAsync();
         }
         catch (Exception ex)
         {
             Log.Write("Update-Prüfung fehlgeschlagen: " + ex.Message);
             if (!silent) MessageBox.Show("Update-Prüfung fehlgeschlagen: " + ex.Message, "ITDriver", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (latest is null || !SelfUpdater.IsNewer(latest, SelfUpdater.CurrentVersion))
+        {
+            if (!silent)
+            {
+                Status = "ITDriver ist aktuell.";
+                MessageBox.Show($"Du verwendest die neueste Version ({SelfUpdater.CurrentVersion.ToString(3)}).", "ITDriver", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            return;
+        }
+
+        var alreadyKnown = AvailableRelease?.Version == latest.Version;
+        AvailableRelease = latest;
+        Status = AppUpdateText;
+        if (!silent) { await InstallAppUpdateAsync(ask: true); return; }
+        if (alreadyKnown || IsBusy) return; // asked before in this session, or a driver installation is running
+
+        switch (SelfUpdater.Decide(latest, SelfUpdater.CurrentVersion, Settings))
+        {
+            case SelfUpdater.AutoAction.Install:
+                await InstallAppUpdateAsync(ask: false);
+                break;
+            case SelfUpdater.AutoAction.Prompt:
+                await InstallAppUpdateAsync(ask: true, offerSkip: true);
+                break;
         }
     }
 
-    public Task InstallAppUpdateAsync() => RunAsync("Aktualisiere ITDriver …", async ct =>
+    public Task InstallAppUpdateAsync() => InstallAppUpdateAsync(ask: true);
+
+    private Task InstallAppUpdateAsync(bool ask, bool offerSkip = false) => RunAsync("Aktualisiere ITDriver …", async ct =>
     {
         if (AvailableRelease is null) return;
-        var notes = string.IsNullOrWhiteSpace(AvailableRelease.Notes) ? "" : "\n\nNeu:\n" + (AvailableRelease.Notes.Length > 600 ? AvailableRelease.Notes[..600] + " …" : AvailableRelease.Notes);
-        if (MessageBox.Show($"ITDriver {AvailableRelease.Version.ToString(3)} installieren? Die App startet danach neu.{notes}", "ITDriver-Update",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var version = AvailableRelease.Version.ToString(3);
+        if (ask)
+        {
+            var notes = string.IsNullOrWhiteSpace(AvailableRelease.Notes) ? "" : "\n\nNeu:\n" + (AvailableRelease.Notes.Length > 600 ? AvailableRelease.Notes[..600] + " …" : AvailableRelease.Notes);
+            var question = $"ITDriver {version} ist auf GitHub verfügbar (installiert: {SelfUpdater.CurrentVersion.ToString(3)}).\n\nJetzt herunterladen und installieren? Die App startet danach neu.{notes}"
+                           + (offerSkip ? "\n\nJa = jetzt installieren · Nein = später · Abbrechen = diese Version überspringen" : "");
+            var answer = MessageBox.Show(question, "ITDriver-Update", offerSkip ? MessageBoxButton.YesNoCancel : MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer == MessageBoxResult.Cancel)
+            {
+                Settings.SkippedAppVersion = version;
+                Settings.Save();
+                Status = $"Version {version} wird übersprungen.";
+                return;
+            }
+            if (answer != MessageBoxResult.Yes) return;
+        }
+        Log.Write($"ITDriver-Update auf {version} ({(ask ? "bestätigt" : "automatisch")})");
         await new SelfUpdater().DownloadAndApplyAsync(AvailableRelease, Progress, ct);
         Application.Current.Shutdown();
     });

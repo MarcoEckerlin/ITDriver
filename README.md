@@ -1,4 +1,4 @@
-# ITDriver
+# ITDriver | AI SLOP
 
 **Kostenloser, quelloffener Treiber-Updater für Windows 10 und 11.** Keine Werbung, keine Bezahlschranke, keine Treiber von dubiosen Servern.
 
@@ -18,14 +18,16 @@ ITDriver erkennt deine Hardware, findet fehlende und veraltete Treiber, installi
 | **Geplanter Scan** | Täglich/wöchentlich/monatlich über die Windows-Aufgabenplanung, mit Benachrichtigung im Infobereich. Installiert nichts automatisch. |
 | **Ignorieren** | Einzelne Updates dauerhaft ausblenden. |
 | **Berichte** | HTML-Bericht oder JSON-Inventar deines Systems exportieren. |
-| **Auto-Update** | ITDriver prüft GitHub Releases auf neue Versionen und aktualisiert sich selbst (SHA-256-geprüft). |
+| **Auto-Update** | ITDriver prüft beim Start, alle 6 Stunden und beim geplanten Hintergrund-Scan die GitHub Releases auf neue Versionen. Es fragt einmal pro Version (installieren, später, überspringen) oder installiert auf Wunsch automatisch ohne Nachfrage – immer SHA-256-geprüft, bei installierter Version über den Setup. |
 | **Kommandozeile** | `ITDriver.exe --report bericht.html`, `--export-inventory inventar.json [--no-windows-update]`, `--background-scan` |
 
 ## Woher kommen die Treiber?
 
 - **Windows Update** – über die offizielle Windows-Update-Schnittstelle.
 - **Microsoft Update-Katalog** (catalog.update.microsoft.com) – Suche per Hardware-ID; die Pakete kommen direkt von Microsofts Download-Servern und werden mit `pnputil` installiert. Alle Treiber dort sind von Microsoft (WHQL) signiert.
-- **Hersteller** – ITDriver prüft direkt bei AMD die aktuelle **AMD Chipset Software** (passend zum Mainboard-Chipsatz, z. B. X870/B650/B550) und **Radeon Adrenalin**, und bei **ASUS-Mainboards** die offizielle Treiberliste des Boards (LAN, WLAN, Bluetooth, Audio). Diese Pakete werden nicht still installiert; ITDriver öffnet die offizielle Download-Seite. Intel, Gigabyte und MSI blockieren automatische Abfragen – für Intel-, Realtek- und Mainboard-Treiber durchsucht ITDriver deshalb den Microsoft Update-Katalog (inkl. AMD/Intel-Systemgeräte wie GPIO, I2C, SMBus, MEI) und verlinkt die Support-Seite genau deines Boards.
+- **Hersteller** – ITDriver prüft direkt bei AMD die aktuelle **AMD Chipset Software** (passend zum Mainboard-Chipsatz, z. B. X870/B650/B550) und **Radeon Adrenalin**, und bei **ASUS-Mainboards** die offizielle Treiberliste des Boards (LAN, WLAN, Bluetooth, Audio). Diese Pakete lädt ITDriver direkt vom Server des Herstellers (drivers.amd.com, dlcdnets.asus.com) und installiert sie selbst: Die AMD-Installer müssen gültig von AMD signiert sein und laufen still durch, ASUS-Treiberpakete werden per pnputil eingespielt. Nur der Radeon-Treiber öffnet AMDs eigenen Installer. Intel, Gigabyte und MSI blockieren automatische Abfragen – **Intel-Chipsatztreiber** (Chipset INF, MEI, Serial IO, SMBus …), Realtek- und Mainboard-Treiber holt ITDriver deshalb aus dem Microsoft Update-Katalog und installiert sie ebenfalls direkt.
+- **ARM-PCs (Snapdragon)** – Auf Windows on ARM sucht ITDriver gezielt ARM64-Treiber im Katalog (inkl. Qualcomm-Chipsatzgeräte), auf x64-PCs werden ARM64-Pakete nie angeboten.
+- **Eine Bestätigung** – Alle ausgewählten Updates laufen nach einer einzigen Rückfrage nacheinander durch (Neustart-Frage einmal am Ende). Unter Einstellungen lässt sich auch diese Rückfrage abschalten.
 
 ITDriver verteilt selbst **keine** Treiberdateien.
 

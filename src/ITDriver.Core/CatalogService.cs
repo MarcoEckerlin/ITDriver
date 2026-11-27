@@ -137,24 +137,29 @@ public sealed partial class CatalogService
     }
 
     /// <summary>Should this device be checked in the catalog? Only physical hardware with a vendor/device ID.</summary>
+    /// <summary>Windows on ARM (also true when this x64 build runs emulated there).</summary>
+    public static bool IsArm64Os => System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+
     public static bool IsCandidate(DeviceInfo d)
         => d.Present && !d.IsVirtual && d.ErrorCode is not (22 or 45) && QueriesFor(d).Count > 0;
 
     /// <summary>Picks the best newer catalog driver for a device, or null if the installed one is current.</summary>
-    public static CatalogEntry? PickNewer(DeviceInfo device, IEnumerable<CatalogEntry> entries, int? osBuild = null)
+    public static CatalogEntry? PickNewer(DeviceInfo device, IEnumerable<CatalogEntry> entries, int? osBuild = null, bool? arm64 = null)
     {
         var build = osBuild ?? Environment.OSVersion.Version.Build;
-        entries = entries.Where(e => e.MinBuild <= build).ToList();
+        // ARM PCs (Snapdragon & co.) need ARM64 drivers, x64 PCs must never get them.
+        var arm = arm64 ?? IsArm64Os;
+        entries = entries.Where(e => e.MinBuild <= build && e.IsArm == arm).ToList();
         var installed = VersionUtil.Parse(device.DriverVersion);
         if (UsesGenericDriverWithVendorAlternative(device))
         {
             // Microsoft's generic driver is active (e.g. "High Definition Audio", "Microsoft Basic Display"):
             // offer the newest vendor driver from the catalog regardless of the version number scheme.
-            return entries.Where(e => e.IsDriver && !e.IsArm && e.TargetsWindows10Or11 && !string.IsNullOrWhiteSpace(e.Version))
+            return entries.Where(e => e.IsDriver && e.TargetsWindows10Or11 && !string.IsNullOrWhiteSpace(e.Version))
                 .OrderByDescending(e => e.LastUpdated).ThenByDescending(e => VersionUtil.Parse(e.Version)).FirstOrDefault();
         }
         var candidates = entries
-            .Where(e => e.IsDriver && !e.IsArm && e.TargetsWindows10Or11 && !string.IsNullOrWhiteSpace(e.Version))
+            .Where(e => e.IsDriver && e.TargetsWindows10Or11 && !string.IsNullOrWhiteSpace(e.Version))
             .Where(e => device.IsMissingDriver || string.IsNullOrEmpty(device.DriverVersion) || VersionUtil.Parse(e.Version) > installed)
             // Same major version line as installed driver avoids jumping to unrelated packages (e.g. Microsoft inbox 10.0.x vs vendor 1.2.x)
             .Where(e => device.IsMissingDriver || string.IsNullOrEmpty(device.DriverVersion) || SameFamily(installed, VersionUtil.Parse(e.Version)))
@@ -166,9 +171,9 @@ public sealed partial class CatalogService
 
     private static readonly HashSet<string> VendorDriverClasses = new(StringComparer.OrdinalIgnoreCase) { "Display", "Net", "MEDIA", "Bluetooth" };
 
-    /// <summary>Chipset makers whose "System devices" (GPIO, I2C, SMBus, PSP, MEI, Serial IO, power management)
+    /// <summary>Chipset makers whose "System devices" (GPIO, I2C, SMBus, PSP, MEI, Serial IO, power management; Qualcomm on ARM PCs)
     /// get dedicated drivers in the chipset packages that Windows' inbox drivers don't replace.</summary>
-    private static readonly HashSet<string> ChipsetVendors = new(StringComparer.OrdinalIgnoreCase) { "AMD", "Intel" };
+    private static readonly HashSet<string> ChipsetVendors = new(StringComparer.OrdinalIgnoreCase) { "AMD", "Intel", "Qualcomm" };
 
     /// <summary>Device of a class where vendor drivers clearly beat the Microsoft inbox driver (GPU, network, audio, Bluetooth, AMD/Intel chipset).</summary>
     internal static bool UsesGenericDriverWithVendorAlternative(DeviceInfo d)

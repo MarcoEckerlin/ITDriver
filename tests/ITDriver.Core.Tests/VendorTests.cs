@@ -106,7 +106,9 @@ public class VendorTests
         var lan = offers.Single(o => o.DeviceInstanceId == "lan");
         Assert.Equal("1125.27.50.919", lan.NewVersion);
         Assert.Equal(UpdateSource.Vendor, lan.Source);
-        Assert.False(lan.IsSelected);
+        Assert.True(lan.IsSelected); // ZIP with INF drivers: ITDriver installs it itself
+        Assert.Equal(VendorInstallKind.InfPackage, lan.VendorInstall);
+        Assert.StartsWith("https://dlcdnets.asus.com/", lan.DownloadUrl);
         Assert.Equal("5.7.0.6054", offers.Single(o => o.DeviceInstanceId == "wlan").NewVersion);
         Assert.DoesNotContain(offers, o => o.DeviceInstanceId == "audio"); // installed audio driver is newer than the board package
     }
@@ -145,6 +147,60 @@ public class VendorTests
         Assert.Equal("x", CatalogService.PickNewer(gpio, new[] { entry }, osBuild: 26100)?.UpdateId);
     }
 
+    [Fact]
+    public void Intel_chipset_device_on_inbox_driver_gets_intel_chipset_inf()
+    {
+        var smbus = new DeviceInfo
+        {
+            Name = "SM-Bus-Controller", Class = "System", HardwareIds = new[] { @"PCI\VEN_8086&DEV_7A23&SUBSYS_86941043&REV_11" },
+            DriverProvider = "Microsoft", DriverVersion = "10.0.26100.1", InfName = "machine.inf",
+        };
+        Assert.True(CatalogService.UsesGenericDriverWithVendorAlternative(smbus));
+        var x64 = new CatalogEntry("x64", "INTEL - System - 10.1.19.4", "Windows 10 and later drivers", "Drivers (Other Hardware)", new DateTime(2024, 5, 1), "10.1.19.4", 1000);
+        Assert.Equal("x64", CatalogService.PickNewer(smbus, new[] { x64 }, osBuild: 26100, arm64: false)?.UpdateId);
+    }
+
+    [Fact]
+    public void Arm_pcs_get_only_arm64_drivers_and_x64_pcs_never()
+    {
+        var soc = new DeviceInfo
+        {
+            Name = "Qualcomm(R) Power Engine", Class = "System", HardwareIds = new[] { @"ACPI\VEN_QCOM&DEV_0C1B" },
+            DriverProvider = "Microsoft", DriverVersion = "10.0.26100.1", InfName = "machine.inf",
+        };
+        Assert.Equal("Qualcomm", VendorCatalog.Find(soc)?.Name);
+        Assert.True(CatalogService.UsesGenericDriverWithVendorAlternative(soc));
+        var arm = new CatalogEntry("arm", "Qualcomm - System - 1.0.4100.0000 ARM64", "Windows 11 Client, version 24H2 and later, Servicing Drivers", "Drivers (Other Hardware)", new DateTime(2025, 6, 1), "1.0.4100.0", 1000);
+        var x64 = new CatalogEntry("x64", "Qualcomm - System - 1.0.4200.0000", "Windows 11 Client, version 24H2 and later, Servicing Drivers", "Drivers (Other Hardware)", new DateTime(2025, 7, 1), "1.0.4200.0", 1000);
+        Assert.Equal("arm", CatalogService.PickNewer(soc, new[] { arm, x64 }, osBuild: 26100, arm64: true)?.UpdateId);
+        Assert.Equal("x64", CatalogService.PickNewer(soc, new[] { arm, x64 }, osBuild: 26100, arm64: false)?.UpdateId);
+    }
+
+    [Fact]
+    public void Finds_direct_amd_installer_links()
+    {
+        const string chipset = """<a href="https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe">Download</a>""";
+        Assert.Equal("https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe", VendorUpdateService.ParseAmdChipsetUrl(chipset, "8.09.28.1124"));
+        Assert.Null(VendorUpdateService.ParseAmdChipsetUrl(chipset, "8.10.0.1"));
+        const string gpu = """
+            <a href="https://drivers.amd.com/drivers/installer/26.10/whql/amd-software-adrenalin-edition-26.11.2-minimalsetup-261118_web.exe">a</a>
+            <a href="https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.11.2-win11-b.exe">b</a>
+            """;
+        Assert.Equal("https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.11.2-win11-b.exe", VendorUpdateService.ParseAdrenalinUrl(gpu, "26.11.2"));
+    }
+
+    [Theory]
+    [InlineData("https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe", true, "Advanced Micro Devices")]
+    [InlineData("https://dlcdnets.asus.com/pub/ASUS/mb/08WIRELESS/DRV_WiFi.zip", true, null)]
+    [InlineData("http://drivers.amd.com/drivers/x.exe", false, null)]
+    [InlineData("https://drivers.amd.com.evil.example/x.exe", false, null)]
+    [InlineData("https://example.com/amd_chipset_software.exe", false, null)]
+    public void Only_downloads_from_vendor_servers(string url, bool trusted, string? publisher)
+    {
+        Assert.Equal(trusted, VendorInstallerHosts.IsTrusted(url, out var pub));
+        Assert.Equal(publisher, pub);
+    }
+
     /// <summary>Live checks of the official vendor sources; run only where ITDRIVER_ONLINE_TESTS=1 (CI).</summary>
     [Fact]
     public async Task Live_vendor_sources()
@@ -162,6 +218,37 @@ public class VendorTests
         Assert.Contains(offers, o => o.Title.StartsWith("AMD Chipset Software"));
         Assert.Contains(offers, o => o.Title.StartsWith("AMD Software: Adrenalin Edition"));
         Assert.Contains(offers, o => o.DeviceInstanceId == "lan" && o.Provider == "ASUS");
+
+        // Direct installers: links found and AMD's server hands out the file (only the first bytes are fetched, nothing is run).
+        var chipset = offers.Single(o => o.Title.StartsWith("AMD Chipset Software"));
+        Assert.Equal(VendorInstallKind.AmdChipset, chipset.VendorInstall);
+        Assert.True(VendorInstallerHosts.IsTrusted(chipset.DownloadUrl!, out _));
+        var adrenalin = offers.Single(o => o.Title.StartsWith("AMD Software: Adrenalin Edition"));
+        Assert.Equal(VendorInstallKind.AmdAdrenalin, adrenalin.VendorInstall);
+        using var req = new HttpRequestMessage(HttpMethod.Get, chipset.DownloadUrl);
+        req.Headers.Referrer = new Uri("https://www.amd.com/");
+        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 1);
+        req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+        Assert.True(resp.IsSuccessStatusCode, $"AMD download: {(int)resp.StatusCode}");
+        Assert.NotEqual("text/html", resp.Content.Headers.ContentType?.MediaType);
+        var head = await resp.Content.ReadAsByteArrayAsync();
+        Assert.Equal((byte)'M', head[0]); // Windows executable ("MZ")
+    }
+
+    [Fact]
+    public async Task Live_intel_chipset_device_gets_intel_inf()
+    {
+        if (Environment.GetEnvironmentVariable("ITDRIVER_ONLINE_TESTS") != "1") return;
+        // Intel 300-series SMBus controller still on Microsoft's inbox driver.
+        var dev = new DeviceInfo
+        {
+            Name = "SM-Bus-Controller", Class = "System", InstanceId = "smbus", Present = true,
+            HardwareIds = new[] { @"PCI\VEN_8086&DEV_A323&SUBSYS_86941043&REV_10" },
+            DriverVersion = "10.0.19041.1", DriverProvider = "Microsoft", InfName = "machine.inf",
+        };
+        var offers = await new CatalogService().FindUpdatesAsync(new[] { dev }, new HashSet<string>(), null);
+        Assert.Single(offers);
     }
 
     [Fact]
@@ -179,4 +266,37 @@ public class VendorTests
         Assert.Single(offers);
         Assert.True(VersionUtil.Parse(offers[0].NewVersion) > VersionUtil.Parse("6.0.9927.1"));
     }
+}
+
+public class AutoUpdateTests
+{
+    private static AppRelease Rel(string v, bool assets = true) => new(new Version(v), "v" + v, "ITDriver " + v, "", assets ? "z" : null, assets ? "zs" : null, "h",
+        assets ? "s" : null, assets ? "ss" : null);
+
+    [Fact]
+    public void Prompts_for_newer_release()
+        => Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), new AppSettings()));
+
+    [Fact]
+    public void Installs_without_asking_when_enabled()
+        => Assert.Equal(SelfUpdater.AutoAction.Install, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
+
+    [Fact]
+    public void Ignores_current_and_older()
+    {
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(Rel("1.2.0"), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(null, new Version(1, 2, 0), new AppSettings()));
+    }
+
+    [Fact]
+    public void Respects_skipped_version_but_not_newer_ones()
+    {
+        var s = new AppSettings { SkippedAppVersion = "1.3.0" };
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), s));
+        Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.1"), new Version(1, 2, 0), s));
+    }
+
+    [Fact]
+    public void Release_without_packages_is_only_announced()
+        => Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.0", assets: false), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
 }
