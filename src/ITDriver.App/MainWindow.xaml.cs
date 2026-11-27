@@ -78,7 +78,7 @@ public partial class MainWindow : Window
     private async Task InstallWithConfirm(List<DriverUpdate> list)
     {
         if (list.Count == 0) { _vm.Status = "Keine Updates ausgewählt."; return; }
-        if (!_vm.Settings.ConfirmInstall) { await _vm.InstallAsync(list); return; }
+        if (!_vm.Settings.AskBeforeInstall) { await _vm.InstallAsync(list); return; }
         var interactive = list.Any(u => u.VendorInstall == VendorInstallKind.AmdAdrenalin);
         var pages = list.Count(u => u.Source == UpdateSource.Vendor && u.VendorInstall == VendorInstallKind.None);
         var text = $"{list.Count} Treiber-Update(s) installieren?\n\n" + string.Join("\n", list.Take(12).Select(u => "• " + u.DisplayName)) +
