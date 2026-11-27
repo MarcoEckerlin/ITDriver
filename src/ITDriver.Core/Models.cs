@@ -125,6 +125,8 @@ public sealed class SystemSummary
     public string Manufacturer { get; set; } = "";
     public string Model { get; set; } = "";
     public string Board { get; set; } = "";
+    public string BoardManufacturer { get; set; } = "";
+    public string BoardProduct { get; set; } = "";
     public string Bios { get; set; } = "";
     public string Cpu { get; set; } = "";
     public double RamGB { get; set; }

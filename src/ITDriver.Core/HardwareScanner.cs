@@ -59,7 +59,12 @@ public sealed class HardwareScanner
             sum.Model = (o["Model"] as string ?? "").Trim();
             sum.RamGB = Math.Round(Convert.ToDouble(o["TotalPhysicalMemory"] ?? 0) / (1L << 30), 1);
         });
-        Query("SELECT Manufacturer, Product FROM Win32_BaseBoard", o => sum.Board = $"{o["Manufacturer"]} {o["Product"]}".Trim());
+        Query("SELECT Manufacturer, Product FROM Win32_BaseBoard", o =>
+        {
+            sum.BoardManufacturer = (o["Manufacturer"] as string ?? "").Trim();
+            sum.BoardProduct = (o["Product"] as string ?? "").Trim();
+            sum.Board = $"{sum.BoardManufacturer} {sum.BoardProduct}".Trim();
+        });
         Query("SELECT SMBIOSBIOSVersion, ReleaseDate FROM Win32_BIOS", o =>
         {
             var date = ParseCim(o["ReleaseDate"] as string);

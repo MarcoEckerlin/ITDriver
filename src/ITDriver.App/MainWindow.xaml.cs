@@ -98,7 +98,7 @@ public partial class MainWindow : Window
     private void UpdateInfo_Click(object sender, RoutedEventArgs e)
     {
         if (UpdatesGrid.SelectedItem is not DriverUpdate u) { _vm.Status = "Bitte zuerst ein Update markieren."; return; }
-        if (u.Source == UpdateSource.Catalog && u.InfoUrl != null) { MainViewModel.Open(u.InfoUrl); return; }
+        if (u.Source != UpdateSource.WindowsUpdate && u.InfoUrl != null) { MainViewModel.Open(u.InfoUrl); return; }
         var device = _vm.Devices.FirstOrDefault(d => d.InstanceId == u.DeviceInstanceId);
         MainViewModel.Open(device?.CatalogSearchUrl ?? "https://www.catalog.update.microsoft.com/Search.aspx?q=" + Uri.EscapeDataString(u.Title));
     }

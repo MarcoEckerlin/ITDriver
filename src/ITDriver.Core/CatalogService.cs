@@ -52,11 +52,53 @@ public sealed partial class CatalogService
         _http.DefaultRequestHeaders.AcceptLanguage.Add(new StringWithQualityHeaderValue("en-US"));
     }
 
-    public async Task<List<CatalogEntry>> SearchAsync(string query, CancellationToken ct = default)
-        => ParseSearch(await SearchHtmlAsync(query, ct));
+    /// <summary>Searches the catalog. The catalog shows 25 results per page, so further pages are requested
+    /// (ASP.NET postback, as the "Next" link does) up to <paramref name="maxPages"/> – important for GPUs with dozens of releases.</summary>
+    public async Task<List<CatalogEntry>> SearchAsync(string query, CancellationToken ct = default, int maxPages = 4)
+    {
+        var url = BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query);
+        var html = await _http.GetStringAsync(url, ct);
+        var all = ParseSearch(html);
+        for (int page = 2; page <= maxPages; page++)
+        {
+            var (current, total) = ParsePageInfo(html);
+            if (current >= total) break;
+            using var content = new FormUrlEncodedContent(NextPageForm(html));
+            using var resp = await _http.PostAsync(url, content, ct);
+            if (!resp.IsSuccessStatusCode) break;
+            html = await resp.Content.ReadAsStringAsync(ct);
+            var more = ParseSearch(html).Where(e => all.All(a => a.UpdateId != e.UpdateId)).ToList();
+            if (more.Count == 0) break;
+            all.AddRange(more);
+        }
+        return all;
+    }
 
     internal Task<string> SearchHtmlAsync(string query, CancellationToken ct = default)
         => _http.GetStringAsync(BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query), ct);
+
+    /// <summary>Reads "1 - 25 of 67 (page 1 of 3)".</summary>
+    internal static (int Current, int Total) ParsePageInfo(string html)
+    {
+        var m = Regex.Match(html, @"\(page\s+(\d+)\s+of\s+(\d+)\)", RegexOptions.IgnoreCase);
+        return m.Success ? (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value)) : (1, 1);
+    }
+
+    /// <summary>Form fields for the "Next page" postback: all hidden inputs plus the event target.</summary>
+    internal static List<KeyValuePair<string, string>> NextPageForm(string html)
+    {
+        var form = new List<KeyValuePair<string, string>>();
+        foreach (Match input in Regex.Matches(html, @"<input[^>]*type=[""']hidden[""'][^>]*>", RegexOptions.IgnoreCase))
+        {
+            var name = Regex.Match(input.Value, @"name=[""']([^""']*)[""']", RegexOptions.IgnoreCase);
+            if (!name.Success || name.Groups[1].Value is "__EVENTTARGET" or "__EVENTARGUMENT") continue;
+            var value = Regex.Match(input.Value, @"value=[""']([^""']*)[""']", RegexOptions.IgnoreCase);
+            form.Add(new(name.Groups[1].Value, WebUtility.HtmlDecode(value.Success ? value.Groups[1].Value : "")));
+        }
+        form.Add(new("__EVENTTARGET", "ctl00$catalogBody$nextPageLinkText"));
+        form.Add(new("__EVENTARGUMENT", ""));
+        return form;
+    }
 
     [GeneratedRegex(@"goToDetails\(\s*[""']([0-9a-fA-F\-]{36})[""']\s*\)\s*;?\s*['""]?[^>]*>(.*?)</a>", RegexOptions.Singleline)]
     private static partial Regex RowRegex();
@@ -160,11 +202,16 @@ public sealed partial class CatalogService
 
     private static readonly HashSet<string> VendorDriverClasses = new(StringComparer.OrdinalIgnoreCase) { "Display", "Net", "MEDIA", "Bluetooth" };
 
-    /// <summary>Device of a class where vendor drivers clearly beat the Microsoft inbox driver (GPU, network, audio, Bluetooth).</summary>
+    /// <summary>Chipset makers whose "System devices" (GPIO, I2C, SMBus, PSP, MEI, Serial IO, power management)
+    /// get dedicated drivers in the chipset packages that Windows' inbox drivers don't replace.</summary>
+    private static readonly HashSet<string> ChipsetVendors = new(StringComparer.OrdinalIgnoreCase) { "AMD", "Intel" };
+
+    /// <summary>Device of a class where vendor drivers clearly beat the Microsoft inbox driver (GPU, network, audio, Bluetooth, AMD/Intel chipset).</summary>
     internal static bool UsesGenericDriverWithVendorAlternative(DeviceInfo d)
         => string.Equals(d.DriverProvider, "Microsoft", StringComparison.OrdinalIgnoreCase)
            && !(d.InfName?.StartsWith("oem", StringComparison.OrdinalIgnoreCase) ?? false)
-           && VendorDriverClasses.Contains(d.Class ?? "")
+           && (VendorDriverClasses.Contains(d.Class ?? "")
+               || string.Equals(d.Class, "System", StringComparison.OrdinalIgnoreCase) && ChipsetVendors.Contains(d.Vendor?.Name ?? ""))
            && d.Vendor is { IsMicrosoft: false }
            && !(d.HardwareIds.FirstOrDefault()?.StartsWith("USB", StringComparison.OrdinalIgnoreCase) ?? false); // USB audio/headsets work best with the class driver
 
@@ -174,7 +221,8 @@ public sealed partial class CatalogService
 
     /// <summary>
     /// Checks all candidate devices against the catalog (a few requests in parallel) and returns update offers.
-    /// Devices already covered by <paramref name="skipDeviceIds"/> (e.g. Windows Update offers) are skipped.
+    /// Devices in <paramref name="skipDeviceIds"/> are skipped. Devices with a Windows Update offer are still searched,
+    /// because the catalog often has a newer version than Windows Update ships (see <see cref="MergeOffers"/>).
     /// </summary>
     public async Task<List<DriverUpdate>> FindUpdatesAsync(IReadOnlyList<DeviceInfo> devices, ISet<string> skipDeviceIds, IProgress<string>? progress, CancellationToken ct = default)
     {
@@ -236,6 +284,27 @@ public sealed partial class CatalogService
         if (errors > 0 && errors == groups.Count && groups.Count > 0)
             throw new InvalidOperationException("Der Microsoft Update-Katalog ist nicht erreichbar.");
         return results;
+    }
+
+    /// <summary>
+    /// Combines offers from several sources: per device only the newest version is kept (Windows Update wins a tie,
+    /// because it is installed through the official update stack). Offers without a matched device are kept as they are.
+    /// </summary>
+    public static List<DriverUpdate> MergeOffers(IEnumerable<DriverUpdate> windowsUpdate, IEnumerable<DriverUpdate> other)
+    {
+        var result = windowsUpdate.ToList();
+        foreach (var o in other)
+        {
+            var existing = o.DeviceInstanceId == null ? null
+                : result.FirstOrDefault(u => string.Equals(u.DeviceInstanceId, o.DeviceInstanceId, StringComparison.OrdinalIgnoreCase));
+            if (existing == null) { result.Add(o); continue; }
+            if (VersionUtil.Parse(o.NewVersion) > VersionUtil.Parse(existing.NewVersion) && !string.IsNullOrEmpty(existing.NewVersion) || string.IsNullOrEmpty(existing.NewVersion) && existing.Source != UpdateSource.WindowsUpdate)
+            {
+                result.Remove(existing);
+                result.Add(o);
+            }
+        }
+        return result;
     }
 
     internal static string? ProviderFromTitle(string title)
