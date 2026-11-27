@@ -218,6 +218,37 @@ public class VendorTests
         Assert.Contains(offers, o => o.Title.StartsWith("AMD Chipset Software"));
         Assert.Contains(offers, o => o.Title.StartsWith("AMD Software: Adrenalin Edition"));
         Assert.Contains(offers, o => o.DeviceInstanceId == "lan" && o.Provider == "ASUS");
+
+        // Direct installers: links found and AMD's server hands out the file (only the first bytes are fetched, nothing is run).
+        var chipset = offers.Single(o => o.Title.StartsWith("AMD Chipset Software"));
+        Assert.Equal(VendorInstallKind.AmdChipset, chipset.VendorInstall);
+        Assert.True(VendorInstallerHosts.IsTrusted(chipset.DownloadUrl!, out _));
+        var adrenalin = offers.Single(o => o.Title.StartsWith("AMD Software: Adrenalin Edition"));
+        Assert.Equal(VendorInstallKind.AmdAdrenalin, adrenalin.VendorInstall);
+        using var req = new HttpRequestMessage(HttpMethod.Get, chipset.DownloadUrl);
+        req.Headers.Referrer = new Uri("https://www.amd.com/");
+        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 1);
+        req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+        Assert.True(resp.IsSuccessStatusCode, $"AMD download: {(int)resp.StatusCode}");
+        Assert.NotEqual("text/html", resp.Content.Headers.ContentType?.MediaType);
+        var head = await resp.Content.ReadAsByteArrayAsync();
+        Assert.Equal((byte)'M', head[0]); // Windows executable ("MZ")
+    }
+
+    [Fact]
+    public async Task Live_intel_chipset_device_gets_intel_inf()
+    {
+        if (Environment.GetEnvironmentVariable("ITDRIVER_ONLINE_TESTS") != "1") return;
+        // Intel 300-series SMBus controller still on Microsoft's inbox driver.
+        var dev = new DeviceInfo
+        {
+            Name = "SM-Bus-Controller", Class = "System", InstanceId = "smbus", Present = true,
+            HardwareIds = new[] { @"PCI\VEN_8086&DEV_A323&SUBSYS_86941043&REV_10" },
+            DriverVersion = "10.0.19041.1", DriverProvider = "Microsoft", InfName = "machine.inf",
+        };
+        var offers = await new CatalogService().FindUpdatesAsync(new[] { dev }, new HashSet<string>(), null);
+        Assert.Single(offers);
     }
 
     [Fact]
