@@ -105,17 +105,42 @@ public static class RecommendationEngine
 
         // PC / mainboard manufacturer tool (BIOS, chipset, OEM-specific drivers).
         var oem = VendorCatalog.FindOem(system?.Manufacturer) ?? VendorCatalog.FindOem(system?.Board);
+        var boardUrl = system is null ? null : VendorUpdateService.BoardSupportUrl(system);
         if (oem != null && !oem.IsMicrosoft)
         {
             list.Add(new Recommendation
             {
                 Severity = Severity.Info,
                 Title = $"Support-Seite von {oem.Name}",
-                Detail = $"BIOS-/Firmware-Updates und gerätespezifische Treiber für {system?.Model ?? system?.Board} gibt es beim Hersteller" +
+                Detail = $"BIOS-/Firmware-Updates und Mainboard-Treiber (Chipsatz, LAN, WLAN, Audio, RGB) für {(string.IsNullOrWhiteSpace(system?.BoardProduct) ? system?.Model ?? system?.Board : system!.BoardProduct)} gibt es beim Hersteller" +
                          (oem.Tool != null ? $" (Tool: {oem.Tool})." : "."),
-                Url = oem.DownloadUrl,
-                UrlText = $"{oem.Name} Support",
+                Url = boardUrl ?? oem.DownloadUrl,
+                UrlText = boardUrl != null ? $"{oem.Name}: Treiber für dieses Board" : $"{oem.Name} Support",
             });
+        }
+
+        // AMD/Intel chipset packages: drivers for the system devices that Windows only covers with generic drivers.
+        if (system != null)
+        {
+            var amdChipset = VendorUpdateService.AmdChipset(system);
+            if (VendorUpdateService.AmdChipsetPage(amdChipset) is { } page)
+                list.Add(new Recommendation
+                {
+                    Severity = Severity.Info,
+                    Title = $"AMD Chipsatztreiber ({amdChipset})",
+                    Detail = "Die AMD Chipset Software enthält Treiber für GPIO, I2C, SMBus, PSP und die Energiepläne (bei X3D-Prozessoren auch den 3D V-Cache Optimizer). ITDriver prüft die Version direkt bei AMD.",
+                    Url = page,
+                    UrlText = "AMD Chipsatz-Downloads",
+                });
+            else if (system.Cpu.Contains("Intel", StringComparison.OrdinalIgnoreCase))
+                list.Add(new Recommendation
+                {
+                    Severity = Severity.Info,
+                    Title = "Intel Chipsatz- und Grafiktreiber",
+                    Detail = "Intel verteilt Chipsatz (INF), Management Engine, Serial IO, Grafik, WLAN und Bluetooth über den Intel Driver & Support Assistant. ITDriver findet viele davon zusätzlich im Microsoft Update-Katalog.",
+                    Url = "https://www.intel.de/content/www/de/de/support/detect.html",
+                    UrlText = "Intel Driver & Support Assistant",
+                });
         }
 
         return list

@@ -26,6 +26,7 @@ public sealed class DriverManager
     public HardwareScanner Scanner { get; } = new();
     public WindowsUpdateService WindowsUpdate { get; } = new();
     public CatalogService Catalog { get; } = new();
+    public VendorUpdateService Vendors { get; } = new();
     public DriverStoreService Store { get; } = new();
     public RestorePointService RestorePoints { get; } = new();
     public DriverBackupService Backups { get; }
@@ -71,9 +72,9 @@ public sealed class DriverManager
             progress?.Report("Durchsuche Microsoft Update-Katalog nach neueren Treibern …");
             try
             {
-                var covered = result.Updates.Concat(result.IgnoredUpdates).Select(u => u.DeviceInstanceId).Where(i => i != null).ToHashSet(StringComparer.OrdinalIgnoreCase)!;
-                var found = await Catalog.FindUpdatesAsync(result.Devices, covered!, progress, ct);
-                result.Updates.AddRange(found.Where(u => !Settings.IsIgnored(u)));
+                var ignoredDevices = result.IgnoredUpdates.Select(u => u.DeviceInstanceId).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var found = await Catalog.FindUpdatesAsync(result.Devices, ignoredDevices, progress, ct);
+                result.Updates = CatalogService.MergeOffers(result.Updates, found.Where(u => !Settings.IsIgnored(u)));
                 result.IgnoredUpdates.AddRange(found.Where(Settings.IsIgnored));
             }
             catch (OperationCanceledException) { throw; }
@@ -82,6 +83,19 @@ public sealed class DriverManager
                 result.CatalogError = ex.Message;
                 Log.Write("Katalogsuche fehlgeschlagen: " + ex.Message);
             }
+        }
+
+        if (Settings.SearchVendors)
+        {
+            try
+            {
+                var installedSoftware = await Task.Run(VendorUpdateService.ReadInstalledSoftware, ct);
+                var vendorOffers = await Vendors.FindUpdatesAsync(result.System, result.Devices, installedSoftware, progress, ct);
+                result.Updates = CatalogService.MergeOffers(result.Updates, vendorOffers.Where(u => !Settings.IsIgnored(u)));
+                result.IgnoredUpdates.AddRange(vendorOffers.Where(Settings.IsIgnored));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { Log.Write("Herstellerprüfung fehlgeschlagen: " + ex.Message); }
         }
 
         result.Recommendations = Settings.ShowVendorRecommendations
@@ -99,6 +113,16 @@ public sealed class DriverManager
     public async Task<List<InstallOutcome>> InstallAsync(IReadOnlyList<DriverUpdate> updates, Action<DriverUpdate, string>? onState, IProgress<string>? progress, CancellationToken ct = default)
     {
         var outcomes = new List<InstallOutcome>();
+        if (updates.Count == 0) return outcomes;
+
+        foreach (var u in updates.Where(u => u.Source == UpdateSource.Vendor))
+        {
+            // Vendor packages come with the vendor's own installer: open the official download page instead of installing silently.
+            if (u.InfoUrl != null) OpenUrl(u.InfoUrl);
+            onState?.Invoke(u, "↗ Herstellerseite geöffnet");
+            outcomes.Add(new InstallOutcome { UpdateId = u.UpdateId, Title = u.Title, Success = false, Message = "Download-Seite des Herstellers geöffnet." });
+        }
+        updates = updates.Where(u => u.Source != UpdateSource.Vendor).ToList();
         if (updates.Count == 0) return outcomes;
 
         bool restorePoint = false;
@@ -163,6 +187,12 @@ public sealed class DriverManager
             Log.Write($"{u.Title}: {outcome.Message}");
         }
         return outcomes;
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Write("Link konnte nicht geöffnet werden: " + ex.Message); }
     }
 
     public async Task<(bool Ok, string Message)> RollbackAsync(HistoryEntry entry, CancellationToken ct = default)
