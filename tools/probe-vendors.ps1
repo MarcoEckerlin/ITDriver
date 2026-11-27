@@ -20,27 +20,32 @@ function Probe($name, $url, $patterns, $max = 6) {
 
 
 $base = 'https://www.catalog.update.microsoft.com/Search.aspx?q='
-$s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$u = $base + 'VEN_1002%26DEV_744C'
-$r = Invoke-WebRequest -Uri $u -WebSession $s -UserAgent $ua
-$c = $r.Content
-Write-Host "FORM: " ([regex]::Match($c, '<form[^>]*>').Value)
-foreach ($m in [regex]::Matches($c, 'handlePageChange[^{]*\{.{0,900}', 'Singleline')) { Write-Host "JS: $($m.Value -replace '\s+',' ')" }
-foreach ($m in [regex]::Matches($c, '<input[^>]*>', 'IgnoreCase')) { $v = $m.Value; if ($v.Length -gt 160) { $v = $v.Substring(0,160) }; Write-Host "INPUT: $v" }
-foreach ($m in [regex]::Matches($c, '<a[^>]*(dateColumnHeader|HeaderLink|columnHeader|sort)[^>]*>', 'IgnoreCase')) { Write-Host "HDR: $($m.Value)" }
-$form = @{}
-foreach ($m in [regex]::Matches($c, '<input[^>]*type="hidden"[^>]*>', 'IgnoreCase')) {
-  $n = [regex]::Match($m.Value, 'name="([^"]*)"').Groups[1].Value
-  $v = [regex]::Match($m.Value, 'value="([^"]*)"').Groups[1].Value
-  if ($n) { $form[$n] = [System.Net.WebUtility]::HtmlDecode($v) }
+function TryPost($label, $target, $extra) {
+  $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+  $u = $base + 'VEN_1002%26DEV_744C'
+  $r = Invoke-WebRequest -Uri $u -WebSession $s -UserAgent $ua
+  $c = $r.Content
+  $form = [ordered]@{}
+  foreach ($m in [regex]::Matches($c, '<input[^>]*>', 'IgnoreCase')) {
+    $t = [regex]::Match($m.Value, 'type="([^"]*)"').Groups[1].Value
+    if ($t -notin @('hidden','text')) { continue }
+    $n = [regex]::Match($m.Value, 'name="([^"]*)"').Groups[1].Value
+    $v = [regex]::Match($m.Value, 'value="([^"]*)"').Groups[1].Value
+    if ($n) { $form[$n] = [System.Net.WebUtility]::HtmlDecode($v) }
+  }
+  $form['__EVENTTARGET'] = $target
+  $form['__EVENTARGUMENT'] = ''
+  foreach ($k in $extra.Keys) { $form[$k] = $extra[$k] }
+  try {
+    $r2 = Invoke-WebRequest -Uri $u -Method Post -Body $form -WebSession $s -UserAgent $ua -ContentType 'application/x-www-form-urlencoded' -Headers @{ Referer = $u; Origin = 'https://www.catalog.update.microsoft.com' }
+    $c2 = $r2.Content
+    $err = [regex]::Match($c2, 'Error number: [0-9A-F]+').Value
+    Write-Host "$label LEN $($c2.Length) DUR " ([regex]::Match($c2, 'searchDuration">[^<]*').Value) " ERR $err"
+    [regex]::Matches($c2, 'goToDetails\("[^>]*>[^<]*<') | Select-Object -First 3 | ForEach-Object { Write-Host "   $($_.Value -replace '\s+',' ')" }
+    [regex]::Matches($c2, '_C4_R\d+"[^>]*>[^<]*<') | Select-Object -First 3 | ForEach-Object { Write-Host "   $($_.Value -replace '\s+',' ')" }
+  } catch { Write-Host "$label ERROR $($_.Exception.Message)" }
 }
-$form['__EVENTTARGET'] = 'ctl00$catalogBody$nextPageLinkText'
-$form['__EVENTARGUMENT'] = ''
-$r2 = Invoke-WebRequest -Uri $u -Method Post -Body $form -WebSession $s -UserAgent $ua -ContentType 'application/x-www-form-urlencoded'
-$c2 = $r2.Content
-Write-Host "PAGE2 LEN $($c2.Length) TITLE " ([regex]::Match($c2, '<title>[^<]*').Value) " DUR " ([regex]::Match($c2, 'searchDuration">[^<]*').Value)
-Write-Host ("PAGE2 BODY " + (([regex]::Replace($c2, '<script.*?</script>|<style.*?</style>|<[^>]+>', ' ', 'Singleline') -replace '\s+',' ').Substring(0, 700)))
-
-foreach ($q in '%22VEN_10EC%26DEV_1220%26SUBSYS_1458A0C3%22', 'VEN_10EC%26DEV_1220%26SUBSYS_1458A0C3%20Windows%2011', 'HDAUDIO%5CFUNC_01%26VEN_10EC%26DEV_1220', '%22HDAUDIO%5CFUNC_01%26VEN_10EC%26DEV_1220%22', 'VEN_10EC%26DEV_8125', '%22PCI%5CVEN_10EC%26DEV_8125%22') {
-  Probe "q $q" ($base + $q) @('searchDuration">[^<]*<', 'goToDetails\("[^>]*>[^<]*<') 3
-}
+TryPost 'next-with-text' 'ctl00$catalogBody$nextPageLinkText' @{}
+TryPost 'next-imagebutton' '' @{ 'ctl00$catalogBody$nextPageLinkButton.x' = '5'; 'ctl00$catalogBody$nextPageLinkButton.y' = '5' }
+TryPost 'sort-date' 'ctl00$catalogBody$updateMatches$ctl02$dateComputedHeaderLink' @{}
+TryPost 'sort-version' 'ctl00$catalogBody$updateMatches$ctl02$driverVerVersionHeaderLink' @{}
