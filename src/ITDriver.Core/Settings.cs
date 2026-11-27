@@ -18,7 +18,7 @@ public sealed class AppSettings
     /// <summary>Also check official vendor sources (AMD chipset/Radeon, ASUS board driver list) for newer packages.</summary>
     public bool SearchVendors { get; set; } = true;
     /// <summary>Ask once before installing the selected updates (false = start right away).</summary>
-    public bool ConfirmInstall { get; set; } = true;
+    public bool AskBeforeInstall { get; set; } // default off: "Installieren" starts right away (new key, so 1.3.0 settings do not bring the dialog back)
     public int OldDriverYears { get; set; } = 3;
     public ScanSchedule Schedule { get; set; } = ScanSchedule.Weekly;
     public string ScheduleTime { get; set; } = "12:00";

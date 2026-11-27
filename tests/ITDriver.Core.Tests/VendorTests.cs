@@ -270,6 +270,14 @@ public class VendorTests
 
 public class AutoUpdateTests
 {
+    [Fact]
+    public void Installs_without_asking_by_default_also_for_old_settings()
+    {
+        Assert.False(new AppSettings().AskBeforeInstall);
+        var old = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("""{"ConfirmInstall":true,"SearchVendors":true}""")!;
+        Assert.False(old.AskBeforeInstall);
+    }
+
     private static AppRelease Rel(string v, bool assets = true) => new(new Version(v), "v" + v, "ITDriver " + v, "", assets ? "z" : null, assets ? "zs" : null, "h",
         assets ? "s" : null, assets ? "ss" : null);
 
