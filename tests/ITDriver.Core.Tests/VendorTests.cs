@@ -145,21 +145,6 @@ public class VendorTests
         Assert.Equal("x", CatalogService.PickNewer(gpio, new[] { entry }, osBuild: 26100)?.UpdateId);
     }
 
-    [Fact]
-    public void Parses_catalog_paging()
-    {
-        Assert.Equal((1, 3), CatalogService.ParsePageInfo("""<span id="ctl00_catalogBody_searchDuration">1 - 25 of 67 (page 1 of 3)</span>"""));
-        Assert.Equal((1, 1), CatalogService.ParsePageInfo("<html></html>"));
-        var form = CatalogService.NextPageForm("""
-            <input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="abc&amp;d" />
-            <input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
-            <input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="xyz" />
-            """);
-        Assert.Contains(form, f => f.Key == "__VIEWSTATE" && f.Value == "abc&d");
-        Assert.Contains(form, f => f.Key == "__EVENTTARGET" && f.Value == "ctl00$catalogBody$nextPageLinkText");
-        Assert.Single(form, f => f.Key == "__EVENTTARGET");
-    }
-
     /// <summary>Live checks of the official vendor sources; run only where ITDRIVER_ONLINE_TESTS=1 (CI).</summary>
     [Fact]
     public async Task Live_vendor_sources()
@@ -180,10 +165,18 @@ public class VendorTests
     }
 
     [Fact]
-    public async Task Live_catalog_paging()
+    public async Task Live_full_id_query_finds_newer_realtek_audio()
     {
         if (Environment.GetEnvironmentVariable("ITDRIVER_ONLINE_TESTS") != "1") return;
-        var results = await new CatalogService().SearchAsync("VEN_1002&DEV_744C", maxPages: 3);
-        Assert.True(results.Count > 25, $"Nur {results.Count} Treffer – Folgeseiten wurden nicht geladen.");
+        // Reference PC: Realtek ALC1220 audio with 6.0.9927.1 installed; the catalog has newer packages under the full ID.
+        var dev = new DeviceInfo
+        {
+            Name = "Realtek(R) Audio", Class = "MEDIA", InstanceId = "audio", Present = true,
+            HardwareIds = new[] { @"HDAUDIO\FUNC_01&VEN_10EC&DEV_1220&SUBSYS_1458A0C3&REV_1001" },
+            DriverVersion = "6.0.9927.1", DriverProvider = "Realtek Semiconductor Corp.", InfName = "oem35.inf",
+        };
+        var offers = await new CatalogService().FindUpdatesAsync(new[] { dev }, new HashSet<string>(), null);
+        Assert.Single(offers);
+        Assert.True(VersionUtil.Parse(offers[0].NewVersion) > VersionUtil.Parse("6.0.9927.1"));
     }
 }

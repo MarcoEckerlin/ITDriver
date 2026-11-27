@@ -25,7 +25,7 @@ ITDriver erkennt deine Hardware, findet fehlende und veraltete Treiber, installi
 
 - **Windows Update** – über die offizielle Windows-Update-Schnittstelle.
 - **Microsoft Update-Katalog** (catalog.update.microsoft.com) – Suche per Hardware-ID; die Pakete kommen direkt von Microsofts Download-Servern und werden mit `pnputil` installiert. Alle Treiber dort sind von Microsoft (WHQL) signiert.
-- **Hersteller** – für Treiber, die Windows Update nicht (aktuell) anbietet, verlinkt ITDriver ausschließlich die offiziellen Download-Seiten bzw. Tools der Hersteller und den Microsoft Update-Katalog mit der passenden Hardware-ID.
+- **Hersteller** – ITDriver prüft direkt bei AMD die aktuelle **AMD Chipset Software** (passend zum Mainboard-Chipsatz, z. B. X870/B650/B550) und **Radeon Adrenalin**, und bei **ASUS-Mainboards** die offizielle Treiberliste des Boards (LAN, WLAN, Bluetooth, Audio). Diese Pakete werden nicht still installiert; ITDriver öffnet die offizielle Download-Seite. Intel, Gigabyte und MSI blockieren automatische Abfragen – für Intel-, Realtek- und Mainboard-Treiber durchsucht ITDriver deshalb den Microsoft Update-Katalog (inkl. AMD/Intel-Systemgeräte wie GPIO, I2C, SMBus, MEI) und verlinkt die Support-Seite genau deines Boards.
 
 ITDriver verteilt selbst **keine** Treiberdateien.
 

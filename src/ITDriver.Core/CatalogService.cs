@@ -52,53 +52,13 @@ public sealed partial class CatalogService
         _http.DefaultRequestHeaders.AcceptLanguage.Add(new StringWithQualityHeaderValue("en-US"));
     }
 
-    /// <summary>Searches the catalog. The catalog shows 25 results per page, so further pages are requested
-    /// (ASP.NET postback, as the "Next" link does) up to <paramref name="maxPages"/> – important for GPUs with dozens of releases.</summary>
-    public async Task<List<CatalogEntry>> SearchAsync(string query, CancellationToken ct = default, int maxPages = 4)
-    {
-        var url = BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query);
-        var html = await _http.GetStringAsync(url, ct);
-        var all = ParseSearch(html);
-        for (int page = 2; page <= maxPages; page++)
-        {
-            var (current, total) = ParsePageInfo(html);
-            if (current >= total) break;
-            using var content = new FormUrlEncodedContent(NextPageForm(html));
-            using var resp = await _http.PostAsync(url, content, ct);
-            if (!resp.IsSuccessStatusCode) break;
-            html = await resp.Content.ReadAsStringAsync(ct);
-            var more = ParseSearch(html).Where(e => all.All(a => a.UpdateId != e.UpdateId)).ToList();
-            if (more.Count == 0) break;
-            all.AddRange(more);
-        }
-        return all;
-    }
+    /// <summary>Searches the catalog (first result page, 25 entries; the catalog rejects automated paging postbacks,
+    /// so callers combine several query forms instead).</summary>
+    public async Task<List<CatalogEntry>> SearchAsync(string query, CancellationToken ct = default)
+        => ParseSearch(await SearchHtmlAsync(query, ct));
 
     internal Task<string> SearchHtmlAsync(string query, CancellationToken ct = default)
         => _http.GetStringAsync(BaseUrl + "Search.aspx?q=" + Uri.EscapeDataString(query), ct);
-
-    /// <summary>Reads "1 - 25 of 67 (page 1 of 3)".</summary>
-    internal static (int Current, int Total) ParsePageInfo(string html)
-    {
-        var m = Regex.Match(html, @"\(page\s+(\d+)\s+of\s+(\d+)\)", RegexOptions.IgnoreCase);
-        return m.Success ? (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value)) : (1, 1);
-    }
-
-    /// <summary>Form fields for the "Next page" postback: all hidden inputs plus the event target.</summary>
-    internal static List<KeyValuePair<string, string>> NextPageForm(string html)
-    {
-        var form = new List<KeyValuePair<string, string>>();
-        foreach (Match input in Regex.Matches(html, @"<input[^>]*type=[""']hidden[""'][^>]*>", RegexOptions.IgnoreCase))
-        {
-            var name = Regex.Match(input.Value, @"name=[""']([^""']*)[""']", RegexOptions.IgnoreCase);
-            if (!name.Success || name.Groups[1].Value is "__EVENTTARGET" or "__EVENTARGUMENT") continue;
-            var value = Regex.Match(input.Value, @"value=[""']([^""']*)[""']", RegexOptions.IgnoreCase);
-            form.Add(new(name.Groups[1].Value, WebUtility.HtmlDecode(value.Success ? value.Groups[1].Value : "")));
-        }
-        form.Add(new("__EVENTTARGET", "ctl00$catalogBody$nextPageLinkText"));
-        form.Add(new("__EVENTARGUMENT", ""));
-        return form;
-    }
 
     [GeneratedRegex(@"goToDetails\(\s*[""']([0-9a-fA-F\-]{36})[""']\s*\)\s*;?\s*['""]?[^>]*>(.*?)</a>", RegexOptions.Singleline)]
     private static partial Regex RowRegex();
@@ -166,6 +126,10 @@ public sealed partial class CatalogService
         }
         var (v, d) = id.VendorNamespace == "USB" && raw!.Contains("VID_", StringComparison.OrdinalIgnoreCase) ? ("VID", "PID") : ("VEN", "DEV");
         var basic = $"{v}_{id.VendorId}&{d}_{id.DeviceId}";
+        // The full ID including the bus prefix (e.g. "HDAUDIO\FUNC_01&VEN_10EC&DEV_1220") ranks the newest packages first;
+        // the bare "VEN&DEV" form finds packages that list the device under other subsystem IDs.
+        var prefixed = Regex.Match(raw!, $@"^.*?{d}_{id.DeviceId}", RegexOptions.IgnoreCase);
+        if (prefixed.Success && prefixed.Value.Contains('\\')) result.Add(prefixed.Value.ToUpperInvariant());
         var subsys = Regex.Match(raw!, @"SUBSYS_([0-9A-F]{8})", RegexOptions.IgnoreCase);
         if (subsys.Success) result.Add($"{basic}&SUBSYS_{subsys.Groups[1].Value.ToUpperInvariant()}");
         result.Add(basic);
@@ -238,13 +202,17 @@ public sealed partial class CatalogService
             var device = g.First();
             try
             {
-                CatalogEntry? best = null;
-                foreach (var q in QueriesFor(device))
+                // Several query forms rank different packages first, so the results are combined. The bare VEN&DEV form
+                // (last) is only needed when the more specific ones found no driver at all.
+                var queries = QueriesFor(device);
+                var entries = new List<CatalogEntry>();
+                for (int i = 0; i < queries.Count; i++)
                 {
-                    var entries = await SearchAsync(q, token);
-                    best = PickNewer(device, entries);
-                    if (best != null || entries.Any(e => e.IsDriver)) break; // specific query had drivers -> don't fall back to generic
+                    if (i == queries.Count - 1 && i > 0 && entries.Any(e => e.IsDriver)) break;
+                    foreach (var e in await SearchAsync(queries[i], token))
+                        if (entries.All(x => x.UpdateId != e.UpdateId)) entries.Add(e);
                 }
+                var best = PickNewer(device, entries);
                 if (best != null)
                 {
                     lock (gate)
