@@ -106,7 +106,9 @@ public class VendorTests
         var lan = offers.Single(o => o.DeviceInstanceId == "lan");
         Assert.Equal("1125.27.50.919", lan.NewVersion);
         Assert.Equal(UpdateSource.Vendor, lan.Source);
-        Assert.False(lan.IsSelected);
+        Assert.True(lan.IsSelected); // ZIP with INF drivers: ITDriver installs it itself
+        Assert.Equal(VendorInstallKind.InfPackage, lan.VendorInstall);
+        Assert.StartsWith("https://dlcdnets.asus.com/", lan.DownloadUrl);
         Assert.Equal("5.7.0.6054", offers.Single(o => o.DeviceInstanceId == "wlan").NewVersion);
         Assert.DoesNotContain(offers, o => o.DeviceInstanceId == "audio"); // installed audio driver is newer than the board package
     }
@@ -143,6 +145,60 @@ public class VendorTests
         Assert.True(CatalogService.UsesGenericDriverWithVendorAlternative(gpio));
         var entry = new CatalogEntry("x", "Advanced Micro Devices, Inc System Driver Update (2.2.0.137)", "Windows 11 Client, version 24H2 and later, Servicing Drivers", "Drivers (Other Hardware)", new DateTime(2025, 3, 1), "2.2.0.137", 1000);
         Assert.Equal("x", CatalogService.PickNewer(gpio, new[] { entry }, osBuild: 26100)?.UpdateId);
+    }
+
+    [Fact]
+    public void Intel_chipset_device_on_inbox_driver_gets_intel_chipset_inf()
+    {
+        var smbus = new DeviceInfo
+        {
+            Name = "SM-Bus-Controller", Class = "System", HardwareIds = new[] { @"PCI\VEN_8086&DEV_7A23&SUBSYS_86941043&REV_11" },
+            DriverProvider = "Microsoft", DriverVersion = "10.0.26100.1", InfName = "machine.inf",
+        };
+        Assert.True(CatalogService.UsesGenericDriverWithVendorAlternative(smbus));
+        var x64 = new CatalogEntry("x64", "INTEL - System - 10.1.19.4", "Windows 10 and later drivers", "Drivers (Other Hardware)", new DateTime(2024, 5, 1), "10.1.19.4", 1000);
+        Assert.Equal("x64", CatalogService.PickNewer(smbus, new[] { x64 }, osBuild: 26100, arm64: false)?.UpdateId);
+    }
+
+    [Fact]
+    public void Arm_pcs_get_only_arm64_drivers_and_x64_pcs_never()
+    {
+        var soc = new DeviceInfo
+        {
+            Name = "Qualcomm(R) Power Engine", Class = "System", HardwareIds = new[] { @"ACPI\VEN_QCOM&DEV_0C1B" },
+            DriverProvider = "Microsoft", DriverVersion = "10.0.26100.1", InfName = "machine.inf",
+        };
+        Assert.Equal("Qualcomm", VendorCatalog.Find(soc)?.Name);
+        Assert.True(CatalogService.UsesGenericDriverWithVendorAlternative(soc));
+        var arm = new CatalogEntry("arm", "Qualcomm - System - 1.0.4100.0000 ARM64", "Windows 11 Client, version 24H2 and later, Servicing Drivers", "Drivers (Other Hardware)", new DateTime(2025, 6, 1), "1.0.4100.0", 1000);
+        var x64 = new CatalogEntry("x64", "Qualcomm - System - 1.0.4200.0000", "Windows 11 Client, version 24H2 and later, Servicing Drivers", "Drivers (Other Hardware)", new DateTime(2025, 7, 1), "1.0.4200.0", 1000);
+        Assert.Equal("arm", CatalogService.PickNewer(soc, new[] { arm, x64 }, osBuild: 26100, arm64: true)?.UpdateId);
+        Assert.Equal("x64", CatalogService.PickNewer(soc, new[] { arm, x64 }, osBuild: 26100, arm64: false)?.UpdateId);
+    }
+
+    [Fact]
+    public void Finds_direct_amd_installer_links()
+    {
+        const string chipset = """<a href="https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe">Download</a>""";
+        Assert.Equal("https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe", VendorUpdateService.ParseAmdChipsetUrl(chipset, "8.09.28.1124"));
+        Assert.Null(VendorUpdateService.ParseAmdChipsetUrl(chipset, "8.10.0.1"));
+        const string gpu = """
+            <a href="https://drivers.amd.com/drivers/installer/26.10/whql/amd-software-adrenalin-edition-26.11.2-minimalsetup-261118_web.exe">a</a>
+            <a href="https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.11.2-win11-b.exe">b</a>
+            """;
+        Assert.Equal("https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.11.2-win11-b.exe", VendorUpdateService.ParseAdrenalinUrl(gpu, "26.11.2"));
+    }
+
+    [Theory]
+    [InlineData("https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe", true, "Advanced Micro Devices")]
+    [InlineData("https://dlcdnets.asus.com/pub/ASUS/mb/08WIRELESS/DRV_WiFi.zip", true, null)]
+    [InlineData("http://drivers.amd.com/drivers/x.exe", false, null)]
+    [InlineData("https://drivers.amd.com.evil.example/x.exe", false, null)]
+    [InlineData("https://example.com/amd_chipset_software.exe", false, null)]
+    public void Only_downloads_from_vendor_servers(string url, bool trusted, string? publisher)
+    {
+        Assert.Equal(trusted, VendorInstallerHosts.IsTrusted(url, out var pub));
+        Assert.Equal(publisher, pub);
     }
 
     /// <summary>Live checks of the official vendor sources; run only where ITDRIVER_ONLINE_TESTS=1 (CI).</summary>

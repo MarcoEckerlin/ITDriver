@@ -78,9 +78,15 @@ public partial class MainWindow : Window
     private async Task InstallWithConfirm(List<DriverUpdate> list)
     {
         if (list.Count == 0) { _vm.Status = "Keine Updates ausgewählt."; return; }
+        if (!_vm.Settings.ConfirmInstall) { await _vm.InstallAsync(list); return; }
+        var interactive = list.Any(u => u.VendorInstall == VendorInstallKind.AmdAdrenalin);
+        var pages = list.Count(u => u.Source == UpdateSource.Vendor && u.VendorInstall == VendorInstallKind.None);
         var text = $"{list.Count} Treiber-Update(s) installieren?\n\n" + string.Join("\n", list.Take(12).Select(u => "• " + u.DisplayName)) +
                    (list.Count > 12 ? "\n…" : "") +
-                   (_vm.Settings.CreateRestorePoint ? "\n\nVorher wird ein Wiederherstellungspunkt erstellt." : "");
+                   "\n\nAlles läuft automatisch nacheinander durch, ohne weitere Rückfragen." +
+                   (interactive ? "\nNur der AMD-Grafiktreiber öffnet AMDs eigenen Installer." : "") +
+                   (pages > 0 ? $"\n{pages} Paket(e) ohne Direkt-Download: dafür wird die Herstellerseite geöffnet." : "") +
+                   (_vm.Settings.CreateRestorePoint ? "\nVorher wird ein Wiederherstellungspunkt erstellt." : "");
         if (MessageBox.Show(text, "ITDriver", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             await _vm.InstallAsync(list);
     }

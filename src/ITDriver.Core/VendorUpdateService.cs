@@ -61,6 +61,20 @@ public sealed partial class VendorUpdateService
     internal static string? ParseAmdChipsetVersion(string html)
         => AmdChipsetVersionRegex().Matches(html).Select(m => m.Groups[1].Value).OrderByDescending(VersionUtil.Parse).FirstOrDefault();
 
+    /// <summary>Direct installer link on AMD's download server, e.g. https://drivers.amd.com/drivers/amd_chipset_software_8.09.28.1124.exe.</summary>
+    internal static string? ParseAmdChipsetUrl(string html, string version)
+    {
+        var m = Regex.Match(html, $@"https://drivers\.amd\.com/drivers/amd_chipset_software_{Regex.Escape(version)}\.exe", RegexOptions.IgnoreCase);
+        return m.Success ? m.Value : null;
+    }
+
+    /// <summary>Full (offline) Adrenalin installer for Windows 11/10 on AMD's server.</summary>
+    internal static string? ParseAdrenalinUrl(string html, string version)
+    {
+        var m = Regex.Match(html, $@"https://drivers\.amd\.com/drivers/[\w\-]*adrenalin-edition-{Regex.Escape(version)}-win1[01][\w\-]*\.exe", RegexOptions.IgnoreCase);
+        return m.Success ? m.Value : null;
+    }
+
     // ---------------------------------------------------------------- AMD Radeon
 
     [GeneratedRegex(@"Radeon(?:\(TM\)|™)?\s+RX\s+(\d)(\d{3})\s*(XTX|XT|GRE|S)?", RegexOptions.IgnoreCase)]
@@ -181,7 +195,9 @@ public sealed partial class VendorUpdateService
                 DriverDate = best.Released,
                 SizeBytes = best.SizeBytes,
                 InfoUrl = supportUrl,
-                IsSelected = false,
+                DownloadUrl = string.IsNullOrEmpty(best.Url) ? null : best.Url,
+                VendorInstall = best.Url.Contains(".zip", StringComparison.OrdinalIgnoreCase) ? VendorInstallKind.InfPackage : VendorInstallKind.None,
+                IsSelected = best.Url.Contains(".zip", StringComparison.OrdinalIgnoreCase),
             });
         }
         return offers;
@@ -242,9 +258,15 @@ public sealed partial class VendorUpdateService
         if (AmdChipsetPage(chipset) is { } chipsetPage)
             tasks.Add(Safe($"AMD-Chipsatz {chipset}", async () =>
             {
-                var latest = ParseAmdChipsetVersion(await _http.GetStringAsync(chipsetPage, ct));
+                var html = await _http.GetStringAsync(chipsetPage, ct);
+                var latest = ParseAmdChipsetVersion(html);
                 if (latest != null && (installed.AmdChipsetVersion is null || VersionUtil.Parse(latest) > VersionUtil.Parse(installed.AmdChipsetVersion)))
-                    Add(Package("AMD", $"AMD Chipset Software {latest}", $"AMD Chipsatztreiber ({chipset})", "System", installed.AmdChipsetVersion, latest, chipsetPage));
+                {
+                    var offer = Package("AMD", $"AMD Chipset Software {latest}", $"AMD Chipsatztreiber ({chipset})", "System", installed.AmdChipsetVersion, latest, chipsetPage);
+                    offer.DownloadUrl = ParseAmdChipsetUrl(html, latest);
+                    if (offer.DownloadUrl != null) { offer.VendorInstall = VendorInstallKind.AmdChipset; offer.IsSelected = true; }
+                    Add(offer);
+                }
             }));
 
         // AMD Radeon Adrenalin
@@ -255,8 +277,13 @@ public sealed partial class VendorUpdateService
                 var html = await _http.GetStringAsync(gpuPage, ct);
                 var latest = ParseAdrenalinVersion(html);
                 if (latest != null && AdrenalinIsNewer(latest, ParseAdrenalinBuildDate(html), installed.AdrenalinVersion, radeon.DriverDate))
-                    Add(Package("AMD", $"AMD Software: Adrenalin Edition {latest}", radeon.Name, "Display",
-                        installed.AdrenalinVersion ?? $"Treiber {radeon.DriverVersion}", latest, gpuPage));
+                {
+                    var offer = Package("AMD", $"AMD Software: Adrenalin Edition {latest}", radeon.Name, "Display",
+                        installed.AdrenalinVersion ?? $"Treiber {radeon.DriverVersion}", latest, gpuPage);
+                    offer.DownloadUrl = ParseAdrenalinUrl(html, latest);
+                    if (offer.DownloadUrl != null) { offer.VendorInstall = VendorInstallKind.AmdAdrenalin; offer.IsSelected = true; }
+                    Add(offer);
+                }
             }));
 
         // ASUS mainboards: official driver list per model
