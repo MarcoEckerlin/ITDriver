@@ -1,4 +1,4 @@
-# ITDriver
+# ITDriver | AI SLOP
 
 **Kostenloser, quelloffener Treiber-Updater für Windows 10 und 11.** Keine Werbung, keine Bezahlschranke, keine Treiber von dubiosen Servern.
 
