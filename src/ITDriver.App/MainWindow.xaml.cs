@@ -36,6 +36,10 @@ public partial class MainWindow : Window
             }
             if (justUpdated) _vm.Status = $"ITDriver wurde auf Version {SelfUpdater.CurrentVersion.ToString(3)} aktualisiert.";
             if (_vm.Settings.AutoCheckAppUpdates) _ = _vm.CheckAppUpdateAsync(silent: true);
+            // Keep checking while ITDriver stays open (every 6 hours).
+            var updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromHours(6) };
+            updateTimer.Tick += async (_, _) => { if (_vm.Settings.AutoCheckAppUpdates) await _vm.CheckAppUpdateAsync(silent: true); };
+            updateTimer.Start();
             if (_vm.Settings.ScanOnStartup) await _vm.ScanAsync();
         };
     }

@@ -180,3 +180,36 @@ public class VendorTests
         Assert.True(VersionUtil.Parse(offers[0].NewVersion) > VersionUtil.Parse("6.0.9927.1"));
     }
 }
+
+public class AutoUpdateTests
+{
+    private static AppRelease Rel(string v, bool assets = true) => new(new Version(v), "v" + v, "ITDriver " + v, "", assets ? "z" : null, assets ? "zs" : null, "h",
+        assets ? "s" : null, assets ? "ss" : null);
+
+    [Fact]
+    public void Prompts_for_newer_release()
+        => Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), new AppSettings()));
+
+    [Fact]
+    public void Installs_without_asking_when_enabled()
+        => Assert.Equal(SelfUpdater.AutoAction.Install, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
+
+    [Fact]
+    public void Ignores_current_and_older()
+    {
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(Rel("1.2.0"), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(null, new Version(1, 2, 0), new AppSettings()));
+    }
+
+    [Fact]
+    public void Respects_skipped_version_but_not_newer_ones()
+    {
+        var s = new AppSettings { SkippedAppVersion = "1.3.0" };
+        Assert.Equal(SelfUpdater.AutoAction.None, SelfUpdater.Decide(Rel("1.3.0"), new Version(1, 2, 0), s));
+        Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.1"), new Version(1, 2, 0), s));
+    }
+
+    [Fact]
+    public void Release_without_packages_is_only_announced()
+        => Assert.Equal(SelfUpdater.AutoAction.Prompt, SelfUpdater.Decide(Rel("1.3.0", assets: false), new Version(1, 2, 0), new AppSettings { AutoInstallAppUpdates = true }));
+}

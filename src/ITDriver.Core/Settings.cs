@@ -7,6 +7,10 @@ public sealed class AppSettings
     public bool CreateRestorePoint { get; set; } = true;
     public bool BackupBeforeInstall { get; set; } = true;
     public bool AutoCheckAppUpdates { get; set; } = true;
+    /// <summary>Install new ITDriver versions from GitHub without asking (still SHA-256 verified).</summary>
+    public bool AutoInstallAppUpdates { get; set; } = false;
+    /// <summary>Version the user chose to skip in the update prompt.</summary>
+    public string? SkippedAppVersion { get; set; }
     public bool ScanOnStartup { get; set; } = false;
     public bool ShowVendorRecommendations { get; set; } = true;
     /// <summary>Also search the Microsoft Update Catalog per device for newer drivers than Windows Update offers.</summary>

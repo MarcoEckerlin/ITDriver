@@ -18,7 +18,7 @@ ITDriver erkennt deine Hardware, findet fehlende und veraltete Treiber, installi
 | **Geplanter Scan** | Täglich/wöchentlich/monatlich über die Windows-Aufgabenplanung, mit Benachrichtigung im Infobereich. Installiert nichts automatisch. |
 | **Ignorieren** | Einzelne Updates dauerhaft ausblenden. |
 | **Berichte** | HTML-Bericht oder JSON-Inventar deines Systems exportieren. |
-| **Auto-Update** | ITDriver prüft GitHub Releases auf neue Versionen und aktualisiert sich selbst (SHA-256-geprüft). |
+| **Auto-Update** | ITDriver prüft beim Start, alle 6 Stunden und beim geplanten Hintergrund-Scan die GitHub Releases auf neue Versionen. Es fragt einmal pro Version (installieren, später, überspringen) oder installiert auf Wunsch automatisch ohne Nachfrage – immer SHA-256-geprüft, bei installierter Version über den Setup. |
 | **Kommandozeile** | `ITDriver.exe --report bericht.html`, `--export-inventory inventar.json [--no-windows-update]`, `--background-scan` |
 
 ## Woher kommen die Treiber?

@@ -137,6 +137,18 @@ public sealed class SelfUpdater
         return setup;
     }
 
+    /// <summary>What to do with a release found by an automatic check.</summary>
+    public enum AutoAction { None, Prompt, Install }
+
+    public static AutoAction Decide(AppRelease? release, Version current, AppSettings settings)
+    {
+        if (release is null || !IsNewer(release, current)) return AutoAction.None;
+        var canInstall = release.SetupUrl != null && release.SetupShaUrl != null || release.ZipUrl != null && release.ShaUrl != null;
+        if (!canInstall) return AutoAction.Prompt;
+        if (settings.AutoInstallAppUpdates) return AutoAction.Install;
+        return string.Equals(settings.SkippedAppVersion, release.Version.ToString(3), StringComparison.OrdinalIgnoreCase) ? AutoAction.None : AutoAction.Prompt;
+    }
+
     internal static string ParseSha256(string text)
         => text.Trim().Split(new[] { ' ', '\t', '\r', '\n', '*' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
 }
